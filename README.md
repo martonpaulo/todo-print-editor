@@ -56,7 +56,8 @@ The supported subset is deliberately small:
 - `# YYYY-MM-DD` sets the optional document date.
 - `## Title` starts a list.
 - `- [ ]` and `- [x]` create todo items.
-- A plain `- Item` is accepted as an unchecked item.
+- `* [ ]` and `* [x]` are accepted on input and normalize to the canonical dash form.
+- A plain `- Item` or `* Item` is accepted as an unchecked item.
 - `---` forces a new panel.
 - Unsupported lines are reported instead of silently discarded.
 
