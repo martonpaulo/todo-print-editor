@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import './styles/app.css'
 import { COPY } from './copy'
 import { MarkdownEditor } from './components/MarkdownEditor'
@@ -19,17 +19,17 @@ const INITIAL_LAYOUT_STATUS: LayoutStatus = {
 }
 
 const App = () => {
-  const { document, setDocument, storageError } = usePersistentDocument()
+  const { document, setDocument, undo, redo } = usePersistentDocument()
   const [mode, setMode] = useState<EditorMode>('visual')
   const [markdown, setMarkdown] = useState(() => serializeMarkdown(document))
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
   const [layoutStatus, setLayoutStatus] = useState(INITIAL_LAYOUT_STATUS)
 
-  const applyDocument = (nextDocument: TodoDocument) => {
+  const applyDocument = useCallback((nextDocument: TodoDocument) => {
     setDocument(nextDocument)
     setMarkdown(serializeMarkdown(nextDocument))
     setMarkdownErrors([])
-  }
+  }, [setDocument])
 
   const applyDocumentSettings = (nextDocument: TodoDocument) => {
     setDocument(nextDocument)
@@ -63,119 +63,110 @@ const App = () => {
       ? COPY.print
       : COPY.printBlocked
 
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLTextAreaElement) return
+      if (e.target instanceof HTMLInputElement && (e.target.type === 'text' || e.target.type === 'date' || e.target.type === 'number')) return
+
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault()
+          const prev = undo()
+          if (prev) applyDocument(prev)
+        } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault()
+          const next = redo()
+          if (next) applyDocument(next)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo, applyDocument])
+
   return (
     <div className={`app-shell${canPrint ? '' : ' app-shell--print-blocked'}`}>
-      <header className="app-header screen-only">
-        <div className="brand">
-          <div className="brand__mark" aria-hidden="true">
-            T/P
-          </div>
-          <div>
-            <p className="brand__name">{COPY.appName}</p>
-            <p className="brand__tagline">{COPY.appTagline}</p>
-          </div>
-        </div>
-
-        <div className="header-status">
-          <span className="privacy-badge">
-            <span className="privacy-badge__dot" />
-            {COPY.localBadge}
-          </span>
-          <span
-            className={storageError ? 'save-status save-status--error' : 'save-status'}
-            role={storageError ? 'alert' : 'status'}
-            aria-live={storageError ? 'assertive' : 'polite'}
-          >
-            <Icon name={storageError ? 'warning' : 'check'} size={15} />
-            {storageError ? COPY.saveFailed : COPY.savedLocally}
-          </span>
-        </div>
-      </header>
-
-      <div className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
-        <div className="toolbar-group">
-          <label className="toggle-control">
-            <input
-              type="checkbox"
-              checked={document.showDate}
-              onChange={(event) =>
-                applyDocumentSettings({ ...document, showDate: event.target.checked })
-              }
-            />
-            <span className="toggle-control__track" aria-hidden="true" />
-            <Icon name="calendar" size={17} />
-            <span>{COPY.firstPanelDate}</span>
-          </label>
-
-          <label className={`date-control${document.showDate ? '' : ' date-control--disabled'}`}>
-            <span className="sr-only">{COPY.chooseDate}</span>
-            <input
-              type="date"
-              value={document.date}
-              disabled={!document.showDate}
-              onChange={(event) => {
-                const date = event.target.value
-                applyDocumentSettings(
-                  date ? { ...document, date } : { ...document, showDate: false },
-                )
-              }}
-            />
-          </label>
-        </div>
-
-        <div className="toolbar-group toolbar-group--end">
-          <label className="toggle-control">
-            <input
-              type="checkbox"
-              checked={document.showPanelNumbers}
-              onChange={(event) =>
-                applyDocumentSettings({ ...document, showPanelNumbers: event.target.checked })
-              }
-            />
-            <span className="toggle-control__track" aria-hidden="true" />
-            <Icon name="panel" size={17} />
-            <span>{COPY.panelNumbers}</span>
-          </label>
-
-          <button
-            className="primary-button"
-            type="button"
-            disabled={!canPrint}
-            onClick={() => window.print()}
-          >
-            <Icon name="printer" />
-            {printLabel}
-          </button>
-        </div>
-      </div>
-
       <main className="workspace">
-        <section className="editor-pane screen-only" aria-labelledby="editor-heading">
-          <header className="pane-header">
-            <div>
-              <span className="eyebrow">01 · Editor</span>
-              <h1 id="editor-heading">{COPY.editorTitle}</h1>
-              <p>{COPY.editorDescription}</p>
+        <section className="editor-pane screen-only" aria-label="Editor">
+          <header className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
+            <div className="toolbar-group">
+              <label className="toggle-control">
+                <input
+                  type="checkbox"
+                  checked={document.showDate}
+                  onChange={(event) =>
+                    applyDocumentSettings({ ...document, showDate: event.target.checked })
+                  }
+                />
+                <span className="toggle-control__track" aria-hidden="true" />
+                <Icon name="calendar" size={17} />
+                <span>{COPY.firstPanelDate}</span>
+              </label>
+
+              <label className={`date-control${document.showDate ? '' : ' date-control--disabled'}`}>
+                <span className="sr-only">{COPY.chooseDate}</span>
+                <input
+                  type="date"
+                  value={document.date}
+                  disabled={!document.showDate}
+                  onChange={(event) => {
+                    const date = event.target.value
+                    applyDocumentSettings(
+                      date ? { ...document, date } : { ...document, showDate: false },
+                    )
+                  }}
+                />
+              </label>
             </div>
-            <div className="mode-switcher" role="group" aria-label={COPY.editorMode}>
+
+            <div className="toolbar-group toolbar-group--end">
+              <label className="toggle-control">
+                <input
+                  type="checkbox"
+                  checked={document.showPanelNumbers}
+                  onChange={(event) =>
+                    applyDocumentSettings({ ...document, showPanelNumbers: event.target.checked })
+                  }
+                />
+                <span className="toggle-control__track" aria-hidden="true" />
+                <Icon name="panel" size={17} />
+                <span>{COPY.panelNumbers}</span>
+              </label>
+
+              
+
+              <div className="mode-switcher" role="group" aria-label={COPY.editorMode}>
+                <button
+                  type="button"
+                  aria-pressed={mode === 'visual'}
+                  disabled={markdownErrors.length > 0}
+                  className={mode === 'visual' ? 'mode-switcher__button is-active' : 'mode-switcher__button'}
+                  onClick={() => changeMode('visual')}
+                >
+                  <Icon name="list" size={16} />
+                  {COPY.visualMode}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={mode === 'markdown'}
+                  className={mode === 'markdown' ? 'mode-switcher__button is-active' : 'mode-switcher__button'}
+                  onClick={() => changeMode('markdown')}
+                >
+                  <Icon name="code" size={16} />
+                  {COPY.markdownMode}
+                </button>
+              </div>
+
               <button
+                className="primary-button"
                 type="button"
-                aria-pressed={mode === 'visual'}
-                disabled={markdownErrors.length > 0}
-                className={mode === 'visual' ? 'mode-switcher__button is-active' : 'mode-switcher__button'}
-                onClick={() => changeMode('visual')}
+                disabled={!canPrint}
+                onClick={() => window.print()}
               >
-                <Icon name="list" size={16} />
-                {COPY.visualMode}
-              </button>
-              <button
-                type="button"
-                aria-pressed={mode === 'markdown'}
-                className={mode === 'markdown' ? 'mode-switcher__button is-active' : 'mode-switcher__button'}
-                onClick={() => changeMode('markdown')}
-              >
-                <Icon name="code" size={16} />
-                {COPY.markdownMode}
+                <Icon name="printer" />
+                {printLabel}
               </button>
             </div>
           </header>
@@ -197,17 +188,7 @@ const App = () => {
           </div>
         </section>
 
-        <section className="preview-pane" aria-labelledby="preview-heading">
-          <header className="pane-header preview-pane__header screen-only">
-            <div>
-              <span className="eyebrow">02 · Preview</span>
-              <h2 id="preview-heading">{COPY.previewTitle}</h2>
-              <p>{COPY.previewDescription}</p>
-            </div>
-            <span className="layout-badge" aria-live="polite">
-              {COPY.layoutSummary(layoutStatus.panelCount, layoutStatus.pageCount)}
-            </span>
-          </header>
+        <section className="preview-pane" aria-label="Preview">
 
           {layoutStatus.overflowListIds.length > 0 && (
             <div className="overflow-banner screen-only" role="alert">
@@ -223,11 +204,6 @@ const App = () => {
             document={document}
             onLayoutStatusChange={handleLayoutStatusChange}
           />
-
-          <p className="print-dialog-hint screen-only">
-            <Icon name="printer" size={16} />
-            {COPY.printDialogHint}
-          </p>
         </section>
       </main>
 

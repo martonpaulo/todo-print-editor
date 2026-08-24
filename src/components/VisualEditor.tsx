@@ -119,7 +119,7 @@ export const VisualEditor = ({
               key={block.id}
             >
               <header className="list-card__header">
-                <span className="eyebrow">{COPY.listNumber(currentListNumber)}</span>
+                <span className="eyebrow">{COPY.listNumber(currentListNumber, listNumbers.size)}</span>
                 <div className="list-card__actions">
                   <button
                     className="icon-button"

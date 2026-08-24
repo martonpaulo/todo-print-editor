@@ -11,16 +11,14 @@ export const COPY = {
   firstPanelDate: 'Date on first panel',
   chooseDate: 'Choose document date',
   panelNumbers: 'Panel numbers',
-  print: 'Print A4',
+  print: 'Print',
   preparingPrint: 'Preparing layout…',
   printBlocked: 'Resolve issues to print',
   printBlockedTitle: 'Printing is blocked',
   printBlockedDescription:
     'Return to the editor and resolve layout overflow or Markdown errors before printing.',
   editorTitle: 'Build your lists',
-  editorDescription: 'Edit once. Watch every A4 panel update live.',
   previewTitle: 'Print preview',
-  previewDescription: 'A4 landscape · 3 panels per page · 100% scale',
   addList: 'Add list',
   addPanel: 'Add panel',
   addTask: 'Add task',
@@ -45,7 +43,7 @@ export const COPY = {
   list: 'List',
   checkedTask: 'Completed task',
   uncheckedTask: 'Open task',
-  printDialogHint: 'In the print dialog, choose A4, landscape, no margins, and 100% scale.',
+
   starter: {
     priorities: 'Top priorities',
     priorityItems: ['Write the three must-dos', 'Protect one focus block', 'Close the loop'],
@@ -56,9 +54,8 @@ export const COPY = {
     personal: 'Personal',
     personalItems: ['Pick up groceries', 'Take a proper break', 'Call someone you miss'],
   },
-  listNumber: (number: number) => `List ${number}`,
+  listNumber: (number: number, total: number) => `List ${number} / ${total}`,
   panelNumber: (current: number, total: number) => `Panel ${current} / ${total}`,
-  layoutSummary: (panels: number, pages: number) =>
-    `${panels} ${panels === 1 ? 'panel' : 'panels'} · ${pages} A4 ${pages === 1 ? 'page' : 'pages'}`,
+
   taskCompleteLabel: (task: string) => `Mark “${task || 'Untitled task'}” complete`,
 } as const

@@ -1,5 +1,16 @@
+html,
+body,
+#root {
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--color-paper);
 }
 
@@ -106,18 +117,14 @@
 }
 
 .document-toolbar {
-  position: sticky;
-  top: var(--header-height);
   z-index: 35;
   display: flex;
-  min-height: var(--toolbar-height);
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-6);
-  background: rgb(247 247 245 / 96%);
+  padding: var(--space-5) var(--space-6);
+  background: var(--color-paper);
   border-bottom: 1px solid var(--color-line);
-  backdrop-filter: blur(18px);
 }
 
 .toolbar-group {
@@ -126,7 +133,8 @@
 }
 
 .toolbar-group--end {
-  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-surface-strong);
 }
 
 .toggle-control {
@@ -236,16 +244,15 @@
 
 .workspace {
   display: grid;
-  min-height: calc(100vh - var(--header-height) - var(--toolbar-height));
+  flex: 1;
+  min-height: 0;
   grid-template-columns: var(--editor-width) minmax(0, 1fr);
 }
 
 .editor-pane {
-  position: sticky;
-  top: calc(var(--header-height) + var(--toolbar-height));
   z-index: 10;
   display: flex;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height));
+  min-height: 0;
   min-width: 0;
   flex-direction: column;
   background: var(--color-paper);
@@ -254,6 +261,7 @@
 
 .preview-pane {
   min-width: 0;
+  overflow-y: auto;
   background-color: var(--color-canvas);
   background-image: radial-gradient(var(--color-line) 0.7px, transparent 0.7px);
   background-size: 12px 12px;
@@ -547,7 +555,8 @@
   width: 100%;
   min-height: calc(100vh - 22rem);
   padding: var(--space-5);
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   color: var(--color-ink);
   background: var(--color-surface);
   border: 1px solid var(--color-line-strong);
@@ -733,12 +742,15 @@
     justify-content: space-between;
   }
 
+  html, body, #root, .app-shell {
+    height: auto;
+    overflow: visible;
+  }
   .workspace {
     display: block;
   }
 
   .editor-pane {
-    position: static;
     height: auto;
     max-height: none;
     border-right: 0;
@@ -790,4 +802,14 @@
   .preview-stage {
     padding: var(--space-5) var(--space-3);
   }
+}
+
+.document-toolbar .mode-switcher,
+.document-toolbar .primary-button,
+.document-toolbar .date-control input {
+  width: 100%;
+}
+
+.document-toolbar .date-control {
+  width: 100%;
 }

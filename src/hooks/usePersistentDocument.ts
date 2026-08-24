@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { createStarterDocument } from '../domain/document'
 import { decodeDocument } from '../domain/storage'
 import type { TodoDocument } from '../domain/types'
@@ -30,15 +30,51 @@ const readDocument = (): DocumentState => {
 
 export const usePersistentDocument = () => {
   const [state, setState] = useState<DocumentState>(readDocument)
+  
+  const history = useRef({
+    past: [] as TodoDocument[],
+    present: state.document,
+    future: [] as TodoDocument[]
+  })
+  
+  const lastUpdate = useRef<number>(0)
 
   const setDocument = useCallback((nextDocument: TodoDocument) => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDocument))
+      
+      const now = Date.now()
+      // Merge states if updated within 500ms
+      if (now - lastUpdate.current < 500) {
+        history.current.present = nextDocument
+      } else {
+        history.current.past.push(history.current.present)
+        history.current.present = nextDocument
+        history.current.future = []
+      }
+      lastUpdate.current = now
+
       setState({ document: nextDocument, storageError: false })
     } catch {
       setState({ document: nextDocument, storageError: true })
     }
   }, [])
 
-  return { ...state, setDocument }
+  const undo = useCallback(() => {
+    if (history.current.past.length === 0) return null
+    const previous = history.current.past.pop()!
+    history.current.future.push(history.current.present)
+    history.current.present = previous
+    return previous
+  }, [])
+
+  const redo = useCallback(() => {
+    if (history.current.future.length === 0) return null
+    const next = history.current.future.pop()!
+    history.current.past.push(history.current.present)
+    history.current.present = next
+    return next
+  }, [])
+
+  return { ...state, setDocument, undo, redo }
 }
