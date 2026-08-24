@@ -1,8 +1,9 @@
 .print-page {
+  break-inside: avoid;
   display: grid;
   width: var(--print-page-width);
   height: var(--print-page-height);
-  grid-template-columns: repeat(3, var(--print-panel-width));
+  
   overflow: hidden;
   color: #000000;
   background: #ffffff;
@@ -11,12 +12,13 @@
 }
 
 .print-panel {
+  break-inside: avoid;
   display: flex;
+  flex-direction: column;
   width: var(--print-panel-width);
   height: var(--print-panel-height);
   position: relative;
   min-width: 0;
-  flex-direction: column;
   padding: var(--print-panel-padding-y) var(--print-panel-padding-x);
   overflow: visible;
   background: #ffffff;
@@ -99,7 +101,7 @@
 
 .print-task-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   column-gap: var(--print-task-gap-x);
   row-gap: var(--print-task-gap-y);
 }
@@ -156,6 +158,7 @@
 }
 
 .measurement-layer > .print-panel {
+  break-inside: avoid;
   grid-row: 1;
 }
 
@@ -174,7 +177,6 @@
 }
 
 @page {
-  size: A4 landscape;
   margin: 0;
 }
 
@@ -183,7 +185,6 @@
   body,
   #root,
   .app-shell {
-    width: var(--print-page-width) !important;
     min-width: var(--print-page-width) !important;
     min-height: 0 !important;
     margin: 0 !important;
@@ -208,7 +209,6 @@
   .preview-stage,
   .print-pages {
     display: block !important;
-    width: var(--print-page-width) !important;
     min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -217,8 +217,7 @@
   }
 
   .preview-page-shell {
-    width: var(--print-page-width) !important;
-    height: var(--print-page-height) !important;
+    height: auto !important;
     margin: 0 !important;
     break-after: page;
     page-break-after: always;
@@ -229,11 +228,21 @@
     page-break-after: auto;
   }
 
+  .print-panel {
+    display: block !important;
+    height: auto !important;
+    min-height: 209mm !important;
+    max-height: 210mm !important;
+  }
+  .print-panel__lists {
+    display: block !important;
+  }
   .print-page {
-    width: var(--print-page-width) !important;
-    height: var(--print-page-height) !important;
+    break-inside: avoid;
+    height: auto !important;
     transform: none !important;
     box-shadow: none !important;
+    overflow: hidden !important;
   }
 
   .app-shell--print-blocked .workspace {
@@ -260,3 +269,4 @@
     font: 12pt/1.5 var(--font-print);
   }
 }
+

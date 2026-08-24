@@ -34,7 +34,7 @@ export const paginateBlocks = (
     const height = measurements[block.id] ?? 0
     let panelIndex = panels.length - 1
     let panel = panels[panelIndex]
-    let capacity = panelIndex === 0 ? options.firstPanelCapacity : options.panelCapacity
+    let capacity = (panelIndex === 0 ? options.firstPanelCapacity : options.panelCapacity) - 15
     let gap = panel.length > 0 ? options.listGap : 0
 
     if (panel.length > 0 && usedHeights[panelIndex] + gap + height > capacity) {

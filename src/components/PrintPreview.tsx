@@ -189,6 +189,7 @@ const usePrintMeasurements = (document: TodoDocument) => {
 
     const measure = () => {
       if (!active) return
+      if (typeof window !== 'undefined' && window.matchMedia('print').matches) return
 
       const listHeights: Record<string, number> = {}
       root.querySelectorAll<HTMLElement>('[data-measure-list]').forEach((element) => {
@@ -251,6 +252,7 @@ const usePreviewMetrics = () => {
     if (!stage || !page) return
 
     const measure = () => {
+      if (typeof window !== 'undefined' && window.matchMedia('print').matches) return
       const width = page.offsetWidth
       const height = page.offsetHeight
       const availableWidth = Math.max(stage.clientWidth - 48, 1)
@@ -293,7 +295,7 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
   const panelCount = layout.panels.length
   const pageCount = Math.max(1, Math.ceil(panelCount / 3))
   const pages = Array.from({ length: pageCount }, (_, pageIndex) =>
-    Array.from({ length: 3 }, (_, slotIndex) => layout.panels[pageIndex * 3 + slotIndex] ?? null),
+    Array.from({ length: 3 }, (_, slotIndex) => layout.panels[pageIndex * 3 + slotIndex] ?? null).filter(p => p !== null),
   )
 
   useEffect(() => {
@@ -305,39 +307,74 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
     })
   }, [layout.overflowListIds, measurements.ready, onLayoutStatusChange, pageCount, panelCount])
 
-  const shellStyle = metrics
-    ? { width: `${metrics.width * metrics.scale}px`, height: `${metrics.height * metrics.scale}px` }
-    : undefined
-  const pageStyle = metrics ? { transform: `scale(${metrics.scale})` } : undefined
-
   return (
     <>
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 0; }
+          @page page-1 { size: 99mm 210mm; margin: 0; }
+          @page page-2 { size: 198mm 210mm; margin: 0; }
+          @page page-3 { size: 297mm 210mm; margin: 0; }
+          
+          .print-page-1, .preview-page-shell-1 { page: page-1; width: 99mm !important; }
+          .print-page-2, .preview-page-shell-2 { page: page-2; width: 198mm !important; }
+          .print-page-3, .preview-page-shell-3 { page: page-3; width: 297mm !important; }
+
+          html, body, #root, .app-shell, .workspace, .preview-pane, .preview-stage, .print-pages {
+            width: 100% !important;
+            min-width: 100% !important;
+          }
+        }
+      `}</style>
       <MeasurementLayer document={document} rootRef={rootRef} />
       <div className="preview-stage" ref={stageRef}>
         <div className="print-pages" aria-label={COPY.previewTitle}>
-          {pages.map((panels, pageIndex) => (
-            <div className="preview-page-shell" style={shellStyle} key={`page-${pageIndex + 1}`}>
-              <div
-                className="print-page"
-                ref={pageIndex === 0 ? pageRef : undefined}
-                style={pageStyle}
-              >
-                {panels.map((panel, slotIndex) => {
-                  const panelIndex = pageIndex * 3 + slotIndex
-                  return (
-                    <PrintPanel
-                      key={`panel-${panelIndex + 1}`}
-                      document={document}
-                      lists={panel}
-                      panelIndex={panelIndex}
-                      panelCount={panelCount}
-                      overflowListIds={layout.overflowListIds}
-                    />
-                  )
-                })}
+          {pages.map((panels, pageIndex) => {
+            const currentPanels = panels.length || 1
+            const scale = metrics?.scale || 1
+            
+            const baseWidth = metrics?.width || 1
+            const firstPagePanels = pages[0].length || 1
+            const widthPixels = (baseWidth / firstPagePanels) * currentPanels
+            
+            const shellStyle = metrics ? { 
+              width: `${widthPixels * scale}px`, 
+              height: `${metrics.height * scale}px` 
+            } : undefined
+            
+            const pageStyle = metrics ? { 
+              transform: `scale(${scale})`, 
+              gridTemplateColumns: `repeat(${currentPanels}, var(--print-panel-width))`,
+              width: `${currentPanels * 99}mm`
+            } : { 
+              gridTemplateColumns: `repeat(${currentPanels}, var(--print-panel-width))`,
+              width: `${currentPanels * 99}mm`
+            }
+
+            return (
+              <div className={`preview-page-shell preview-page-shell-${currentPanels}`} style={shellStyle} key={`page-${pageIndex + 1}`}>
+                <div
+                  className={`print-page print-page-${currentPanels}`}
+                  ref={pageIndex === 0 ? pageRef : undefined}
+                  style={pageStyle}
+                >
+                  {panels.map((panel, slotIndex) => {
+                    const panelIndex = pageIndex * 3 + slotIndex
+                    return (
+                      <PrintPanel
+                        key={`panel-${panelIndex + 1}`}
+                        document={document}
+                        lists={panel}
+                        panelIndex={panelIndex}
+                        panelCount={panelCount}
+                        overflowListIds={layout.overflowListIds}
+                      />
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </>
