@@ -86,7 +86,7 @@ describe('Markdown document conversion', () => {
     const result = parseMarkdown('## List\nThis would be lost', baseDocument)
 
     expect(result.errors).toEqual([
-      { line: 2, message: 'Use checklist items such as “- [ ] Task”.' },
+      { line: 2, code: 'unrecognized-line' },
     ])
   })
 
@@ -94,7 +94,7 @@ describe('Markdown document conversion', () => {
     const result = parseMarkdown('## List\n* [yes] Ambiguous', baseDocument)
 
     expect(result.errors).toEqual([
-      { line: 2, message: 'Use checklist items such as “- [ ] Task”.' },
+      { line: 2, code: 'unrecognized-line' },
     ])
     expect(result.document.blocks[0]).toMatchObject({ kind: 'list', items: [] })
   })

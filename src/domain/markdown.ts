@@ -66,12 +66,9 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
     if (line.startsWith('# ')) {
       const date = line.slice(2).trim()
       if (hasDateHeading) {
-        errors.push({ line: lineNumber, message: 'Use only one document date.' })
+        errors.push({ line: lineNumber, code: 'duplicate-date' })
       } else if (!isValidIsoDate(date)) {
-        errors.push({
-          line: lineNumber,
-          message: 'Use an ISO date such as “# 2026-08-24”.',
-        })
+        errors.push({ line: lineNumber, code: 'invalid-date' })
       } else {
         draft.date = date
         hasDateHeading = true
@@ -98,7 +95,7 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
     const checklistMatch = line.match(CHECKLIST_PATTERN)
     if (checklistMatch) {
       if (!currentList) {
-        errors.push({ line: lineNumber, message: 'Add a “## List title” before its tasks.' })
+        errors.push({ line: lineNumber, code: 'task-without-list' })
       } else {
         currentList.items.push({
           text: checklistMatch[2],
@@ -111,17 +108,14 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
     const bulletMatch = line.match(BULLET_PATTERN)
     if (bulletMatch && !/^\[[^\]]*\]/.test(bulletMatch[1])) {
       if (!currentList) {
-        errors.push({ line: lineNumber, message: 'Add a “## List title” before its tasks.' })
+        errors.push({ line: lineNumber, code: 'task-without-list' })
       } else {
         currentList.items.push({ text: bulletMatch[1], checked: false })
       }
       return
     }
 
-    errors.push({
-      line: lineNumber,
-      message: 'Use checklist items such as “- [ ] Task”.',
-    })
+    errors.push({ line: lineNumber, code: 'unrecognized-line' })
   })
 
   return { draft, errors }

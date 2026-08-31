@@ -256,8 +256,7 @@ body,
 .panel-break-card__content,
 .editor-add-actions,
 .inline-message,
-.overflow-banner,
-.markdown-editor__help {
+.overflow-banner {
   display: flex;
   align-items: center;
 }
@@ -453,20 +452,10 @@ body,
 }
 
 .markdown-editor__help {
-  flex-wrap: wrap;
-  gap: var(--space-2);
   margin-top: var(--space-3);
   color: var(--color-ink-muted);
   font-size: var(--text-xs);
   line-height: 1.45;
-}
-
-.markdown-editor__help code {
-  padding: 0.15rem 0.35rem;
-  color: var(--color-ink-soft);
-  background: var(--color-surface-strong);
-  border-radius: 0.2rem;
-  font-family: var(--font-mono);
 }
 
 .inline-message,
