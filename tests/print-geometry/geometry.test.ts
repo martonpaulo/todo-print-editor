@@ -18,6 +18,13 @@ const pxToMm = (px: number): number => (px * MM_PER_INCH) / PX_PER_INCH
 const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_PER_INCH
 
 /**
+ * The slack `src/styles/print.css` allows a panel under `@media print`, as the distance between its
+ * `min-height: 209mm` and the recorded 210mm panel. Not a tolerance for measurement noise — it is
+ * the size of the deviation #34 owns, and it shrinks to zero when #34 is resolved.
+ */
+const PRINT_HEIGHT_CLAMP_SLACK_MM = 1
+
+/**
  * Document shapes worth measuring: one and two panels are partial sheets, the recorded panel count
  * is the full sheet, and one more than that produces a full sheet followed by a trailing partial.
  */
@@ -200,16 +207,20 @@ describe('printed page geometry', () => {
       expect(sheets[0].panels).toHaveLength(contract.panelsPerPage)
       expect(sheets[0].widthMm).toBeCloseTo(contract.pageWidthMm, 1)
 
-      // Height is bounded rather than equal here, and that is a finding rather than a looser
-      // assertion: `.print-panel` under `@media print` is clamped to
-      // `min-height: 209mm; max-height: 210mm`, so it settles 1mm short of the recorded 210mm
-      // panel while the paper itself stays 210mm. Asserting equality would fail against current
-      // main; asserting 209mm would encode the deviation as correct and break when it is fixed.
-      // Tracked in #34, which owns the decision.
+      // Height is bounded on both sides rather than asserted equal, and the slack is exactly the
+      // clamp `.print-panel` carries under `@media print`: `min-height: 209mm; max-height: 210mm`,
+      // so it settles 1mm short of the recorded 210mm while the paper stays 210mm. Asserting
+      // equality would fail against current main; asserting 209mm would encode the deviation as
+      // correct and break when #34 resolves it. The band accepts both the current 209mm and a
+      // fixed 210mm, and rejects anything else — a panel that collapses or overflows still fails.
+      // #34 owns the decision; when it lands, replace this band with equality.
+      const lowest = contract.panelHeightMm - PRINT_HEIGHT_CLAMP_SLACK_MM - 0.05
       sheets[0].panels.forEach((panel) => {
         expect(panel.heightMm).toBeLessThanOrEqual(contract.panelHeightMm + 0.05)
+        expect(panel.heightMm).toBeGreaterThanOrEqual(lowest)
       })
       expect(sheets[0].heightMm).toBeLessThanOrEqual(contract.pageHeightMm + 0.05)
+      expect(sheets[0].heightMm).toBeGreaterThanOrEqual(lowest)
     } finally {
       // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
       await page.emulateMediaType(undefined)
@@ -254,26 +265,37 @@ describe('printed page geometry', () => {
   }, 60_000)
 
   /**
-   * The contract says every printed page is A4 landscape. It is not, yet: `PrintPreview` assigns
-   * `@page page-1` and `page-2` named sizes, so a one- or two-panel document — and the trailing
-   * partial sheet of a longer one — prints narrower paper. That is the open defect #2, which is
-   * outside this check's verification-only scope to fix.
+   * The contract assertion the acceptance criterion asks for: every sheet a document produces is
+   * the recorded page size with the recorded number of panel slots.
    *
-   * This test asserts the deviation rather than ignoring it, so it turns red the moment #2 lands
-   * and the tightened assertion below has to replace it. Asserting the contract here instead would
-   * fail against current main; asserting nothing would leave the gap invisible, which is what this
-   * whole check exists to prevent.
+   * It is marked `fails` because it does not hold yet. `PrintPreview` assigns `@page page-1` and
+   * `page-2` named sizes, so partial and trailing sheets print 99mm and 198mm paper — the open
+   * defect #2, which #18 is scoped out of fixing (`Verification only. No change to pagination
+   * behaviour, the editor, or the print stylesheet.`).
+   *
+   * What is written here is the contract, not the defect: nothing in this test records 99mm or
+   * 198mm as acceptable. `fails` states that current main violates it, and vitest reports a failure
+   * the moment it starts passing — so when #2 lands, this becomes the enforcing test by deleting
+   * one word.
    */
-  it('still prints partial sheets as narrower paper, the deviation #2 owns', async () => {
-    await render(1)
-    const [singlePanelPaper] = await measurePrintedPaper()
+  it.fails(
+    'prints every sheet at the recorded page size with the recorded panel slots (blocked by #2)',
+    async () => {
+      for (const panelCount of PANEL_COUNTS) {
+        await render(panelCount)
+        const sheets = await measureSheets()
+        const paper = await measurePrintedPaper()
 
-    expect(
-      singlePanelPaper.widthMm,
-      'A one-panel document now prints full-width paper. If #2 has landed, replace this test with ' +
-        'the contract assertion: every sheet is the recorded page width with the recorded number ' +
-        'of panel slots.',
-    ).not.toBeCloseTo(contract.pageWidthMm, 0)
-    expect(singlePanelPaper.widthMm).toBeCloseTo(contract.panelWidthMm, 0)
-  }, 60_000)
+        sheets.forEach((sheet) => {
+          expect(sheet.panels).toHaveLength(contract.panelsPerPage)
+          expect(sheet.widthMm).toBeCloseTo(contract.pageWidthMm, 1)
+        })
+        paper.forEach((sheet) => {
+          expect(sheet.widthMm).toBeCloseTo(contract.pageWidthMm, 0)
+          expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
+        })
+      }
+    },
+    240_000,
+  )
 })
