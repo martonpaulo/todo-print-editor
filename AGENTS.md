@@ -25,8 +25,8 @@
 - Commit subject: a commit made for an issue ends with `(#<issue number>)`.
 - Delete branches after merge: enabled.
 - Default branch review policy: `main` requires one approving review, merge commits only, and the `validate` and `pr-conventions` status checks; `strict` stays off so a parallel lane does not re-run every open pull request after each merge. Enforced by ruleset `22041475` since 2026-09-01, approved by the `agent-approver` GitHub App (id `4779359`), which is installed on this repository.
-- Release, signing, and secret-storage policy: validated pushes to `main` deploy the static build to GitHub Pages through GitHub Actions. Use only the repository-scoped `GITHUB_TOKEN`; there are no release artifacts, signing identities, or project secrets.
-- Skills baseline revision: `665b67a3aef31c4a57bc70ee7f984ee5b0a9e124`
+- Release, signing, and secret-storage policy: validated pushes to `main` deploy the static build to GitHub Pages through GitHub Actions when the push changes a file the build reads; `validate` runs on every push and pull request regardless, and the deploy job is skipped for a change outside the build's inputs. Use only the repository-scoped `GITHUB_TOKEN`; there are no release artifacts, signing identities, or project secrets.
+- Skills baseline revision: `45d40d7a35ad074249006f3c058b63299e65a074`
 - Skills baseline applied: `2026-09-01`
 
 Treat these values as stable project decisions. Change an established identifier, license, visibility, branch policy, versioning model, localization strategy, landing-page contract, agent-automation decision, or release policy only through an explicit task that describes the migration and downstream effects.
@@ -43,7 +43,7 @@ Treat these values as stable project decisions. Change an established identifier
 ## Established project patterns
 
 - `TodoDocument` in `src/domain/types.ts` is the canonical user-document model. Layout measurements and pagination are derived projections and are never persisted.
-- Keep parsing, validation, and pagination as pure functions under `src/domain/`; React components consume their results without reimplementing those rules.
+- Keep parsing, validation, pagination, and document mutations as pure functions under `src/domain/`; React components consume their results without reimplementing those rules.
 - Keep reusable visible product copy in `src/copy.ts` and reusable design values in `src/styles/tokens.css`.
 - Keep physical paper dimensions in the print token group and make screen preview and `@media print` consume the same tokens.
 - Keep screen editing components under `src/components/`; `App.tsx` owns mode synchronization and document-level settings.

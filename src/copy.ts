@@ -21,7 +21,9 @@ export const COPY = {
   firstPanelDate: 'Date on first panel',
   chooseDate: 'Choose document date',
   panelNumbers: 'Panel numbers',
-  print: 'Print',
+  print: 'Print A4',
+  printDialogHint:
+    'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. Printers without edge-to-edge support may still add a margin.',
   preparingPrint: 'Preparing layout…',
   printBlocked: 'Resolve issues to print',
   printBlockedTitle: 'Printing is blocked',
@@ -34,7 +36,6 @@ export const COPY = {
   addList: 'Add list',
   addPanel: 'Add panel',
   addTask: 'Add task',
-  listTitle: 'List title',
   taskPlaceholder: 'Write a task…',
   untitledList: 'Untitled list',
   removeList: 'Remove list',
@@ -50,6 +51,13 @@ export const COPY = {
   markdownInvalid: 'Previewing the last valid version',
   overflowTitle: 'One list is too tall for a panel.',
   overflowDescription: 'Shorten the highlighted list before printing. Lists are never split.',
+  // The banner explains the document as a whole; this sentence repeats the same
+  // rule beside the list it applies to, so recovery never depends on the dashed
+  // border, on color, or on reaching the preview.
+  listOverflow: 'This list is too tall for one panel. Shorten it before printing.',
+  goToOverflowList: 'Go to the oversized list',
+  goToPreview: 'View print preview',
+  backToEditor: 'Back to the editor',
   emptyPanel: 'Empty panel',
   panel: 'Panel',
   list: 'List',
@@ -69,7 +77,28 @@ export const COPY = {
   listNumber: (number: number, total: number) => `List ${number} / ${total}`,
   panelNumber: (current: number, total: number) => `Panel ${current} / ${total}`,
 
-  taskCompleteLabel: (task: string) => `Mark “${task || 'Untitled task'}” complete`,
+  // Repeated list and task controls must name their target, so every accessible
+  // name is built from one context string that always carries the current
+  // position. The position keeps names unique when two lists or tasks share the
+  // same text, and stands alone while the text is still empty.
+  listContext: (position: number, title: string) => {
+    const trimmed = title.trim()
+    return trimmed ? `List ${position}: ${trimmed}` : `List ${position}`
+  },
+  taskContext: (position: number, text: string) => {
+    const trimmed = text.trim()
+    return trimmed ? `Task ${position}: ${trimmed}` : `Task ${position}`
+  },
+
+  listTitleLabel: (list: string) => `Title of ${list}`,
+  moveListUpLabel: (list: string) => `Move ${list} up`,
+  moveListDownLabel: (list: string) => `Move ${list} down`,
+  removeListLabel: (list: string) => `Remove ${list}`,
+  addTaskLabel: (list: string) => `Add task to ${list}`,
+
+  taskTextLabel: (task: string, list: string) => `${task} in ${list}`,
+  taskCompleteLabel: (task: string, list: string) => `Mark ${task} in ${list} complete`,
+  removeTaskLabel: (task: string, list: string) => `Remove ${task} from ${list}`,
 
   markdownErrors: MARKDOWN_ERROR_MESSAGES,
 

@@ -4,7 +4,7 @@ import { decodeDocument } from '../domain/storage'
 import type { TodoDocument } from '../domain/types'
 import { recordProfileSample } from '../profiling'
 
-const STORAGE_KEY = 'todo-print-editor.document.v1'
+export const STORAGE_KEY = 'todo-print-editor.document.v1'
 
 interface DocumentState {
   document: TodoDocument
