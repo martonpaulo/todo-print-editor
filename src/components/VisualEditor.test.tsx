@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COPY } from '../copy'
 import type { TodoDocument } from '../domain/types'
 import { VisualEditor } from './VisualEditor'
+import { listCardId } from './elementIds'
 
 const buildDocument = (): TodoDocument => ({
   version: 1,
@@ -164,5 +165,40 @@ describe('centralized contextual copy', () => {
     expect(COPY.taskContext(2, '')).toBe('Task 2')
     expect(COPY.listContext(1, ' Work ')).toBe('List 1: Work')
     expect(COPY.taskContext(3, ' Draft ')).toBe('Task 3: Draft')
+  })
+})
+
+describe('VisualEditor overflow guidance', () => {
+  afterEach(cleanup)
+
+  it('states the correction inside every overflowing list, not only on its border', () => {
+    const document = buildDocument()
+    render(
+      <VisualEditor
+        document={document}
+        overflowListIds={['list-a', 'list-c']}
+        onChange={vi.fn()}
+      />,
+    )
+
+    // Text, once per affected list, so recovery never depends on the dashed
+    // border, on color, or on reaching the preview banner.
+    expect(screen.getAllByText(COPY.listOverflow)).toHaveLength(2)
+
+    const affected = screen.getByRole('region', { name: 'List 1: Work' })
+    expect(affected).toHaveAccessibleDescription(COPY.listOverflow)
+    // The blocked print action sends focus here, so the card must accept it.
+    expect(affected).toHaveAttribute('tabindex', '-1')
+    expect(affected).toHaveAttribute('id', listCardId('list-a'))
+
+    const unaffected = screen.getByRole('region', { name: 'List 2: Work' })
+    expect(unaffected).toHaveAccessibleDescription('')
+    expect(unaffected).not.toHaveAttribute('tabindex')
+  })
+
+  it('leaves an unaffected document without any overflow guidance', () => {
+    renderEditor()
+
+    expect(screen.queryByText(COPY.listOverflow)).not.toBeInTheDocument()
   })
 })
