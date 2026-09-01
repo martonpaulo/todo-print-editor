@@ -33,7 +33,6 @@ export const COPY = {
   addList: 'Add list',
   addPanel: 'Add panel',
   addTask: 'Add task',
-  listTitle: 'List title',
   taskPlaceholder: 'Write a task…',
   untitledList: 'Untitled list',
   removeList: 'Remove list',
@@ -68,7 +67,28 @@ export const COPY = {
   listNumber: (number: number, total: number) => `List ${number} / ${total}`,
   panelNumber: (current: number, total: number) => `Panel ${current} / ${total}`,
 
-  taskCompleteLabel: (task: string) => `Mark “${task || 'Untitled task'}” complete`,
+  // Repeated list and task controls must name their target, so every accessible
+  // name is built from one context string that always carries the current
+  // position. The position keeps names unique when two lists or tasks share the
+  // same text, and stands alone while the text is still empty.
+  listContext: (position: number, title: string) => {
+    const trimmed = title.trim()
+    return trimmed ? `List ${position}: ${trimmed}` : `List ${position}`
+  },
+  taskContext: (position: number, text: string) => {
+    const trimmed = text.trim()
+    return trimmed ? `Task ${position}: ${trimmed}` : `Task ${position}`
+  },
+
+  listTitleLabel: (list: string) => `Title of ${list}`,
+  moveListUpLabel: (list: string) => `Move ${list} up`,
+  moveListDownLabel: (list: string) => `Move ${list} down`,
+  removeListLabel: (list: string) => `Remove ${list}`,
+  addTaskLabel: (list: string) => `Add task to ${list}`,
+
+  taskTextLabel: (task: string, list: string) => `${task} in ${list}`,
+  taskCompleteLabel: (task: string, list: string) => `Mark ${task} in ${list} complete`,
+  removeTaskLabel: (task: string, list: string) => `Remove ${task} from ${list}`,
 
   markdownErrors: MARKDOWN_ERROR_MESSAGES,
 
