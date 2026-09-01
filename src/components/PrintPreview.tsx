@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { COPY } from '../copy'
 import { paginateBlocks } from '../domain/pagination'
+import { recordProfileSample } from '../profiling'
 import type { ListBlock, TodoDocument } from '../domain/types'
 
 export interface LayoutStatus {
@@ -43,7 +44,7 @@ const formatDate = (isoDate: string): string => {
   }).format(date)
 }
 
-const PrintList = ({ list, overflowing = false }: { list: ListBlock; overflowing?: boolean }) => (
+const PrintList = (({ list, overflowing = false }: { list: ListBlock; overflowing?: boolean }) => (
   <section className={`print-list${overflowing ? ' print-list--overflow' : ''}`}>
     <h2 className="print-list__title">{list.title || COPY.untitledList}</h2>
     <div className="print-list__rule" />
@@ -63,7 +64,7 @@ const PrintList = ({ list, overflowing = false }: { list: ListBlock; overflowing
       ))}
     </div>
   </section>
-)
+))
 
 interface PanelHeaderProps {
   document: TodoDocument
@@ -191,6 +192,7 @@ const usePrintMeasurements = (document: TodoDocument) => {
       if (!active) return
       if (typeof window !== 'undefined' && window.matchMedia('print').matches) return
 
+      const measurementStart = performance.now()
       const listHeights: Record<string, number> = {}
       root.querySelectorAll<HTMLElement>('[data-measure-list]').forEach((element) => {
         const id = element.dataset.measureList
@@ -215,6 +217,7 @@ const usePrintMeasurements = (document: TodoDocument) => {
           Object.keys(listHeights).length === listCount,
       }
 
+      recordProfileSample('print-measurement', performance.now() - measurementStart)
       setMeasurements((current) => (measurementsMatch(current, next) ? current : next))
     }
 

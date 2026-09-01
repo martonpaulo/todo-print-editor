@@ -2,6 +2,7 @@ import { useCallback, useState, useRef } from 'react'
 import { createStarterDocument } from '../domain/document'
 import { decodeDocument } from '../domain/storage'
 import type { TodoDocument } from '../domain/types'
+import { recordProfileSample } from '../profiling'
 
 const STORAGE_KEY = 'todo-print-editor.document.v1'
 
@@ -41,7 +42,9 @@ export const usePersistentDocument = () => {
 
   const setDocument = useCallback((nextDocument: TodoDocument) => {
     try {
+      const persistenceStart = performance.now()
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDocument))
+      recordProfileSample('persistence', performance.now() - persistenceStart)
       
       const now = Date.now()
       // Merge states if updated within 500ms
