@@ -21,9 +21,9 @@ const STORAGE_KEY = 'todo-print-editor.document.v1'
 
 interface Sample {
   editToPaint: number
-  instrumentedWork: number
+  editToLastCommit: number
   handlerReturn: number
-  reactCommit: number
+  reactRender: number
   printMeasurement: number
   printMeasurementCount: number
   persistence: number
@@ -35,9 +35,9 @@ interface Summary {
   editToPaintP50: number
   editToPaintP95: number
   editToPaintMax: number
-  instrumentedWorkP95: number
+  editToLastCommitP95: number
   handlerReturnP95: number
-  reactCommitP95: number
+  reactRenderP95: number
   printMeasurementP95: number
   printMeasurementCountP95: number
   persistenceP95: number
@@ -54,12 +54,28 @@ installProfileRecorder({
   },
 })
 
-let commitDurations: number[] = []
+let renderDurations: number[] = []
+
+/**
+ * End of the last task in which React committed.
+ *
+ * `<Profiler onRender>` runs inside the commit phase, so a message posted from
+ * it is delivered once that whole task — handler, render, DOM mutation, layout
+ * effects, and the measurement pass they trigger — has finished. The last such
+ * timestamp before the paint is the end of the pre-paint blocking interval,
+ * whether React did the work inside the event handler or in a task after it.
+ */
+let lastCommitTaskEnd = 0
+const commitTaskProbe = new MessageChannel()
+commitTaskProbe.port1.onmessage = () => {
+  lastCommitTaskEnd = performance.now()
+}
 
 const resetCounters = () => {
   collected['print-measurement'] = []
   collected.persistence = []
-  commitDurations = []
+  renderDurations = []
+  lastCommitTaskEnd = 0
 }
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
@@ -188,20 +204,21 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
     // Layout observers can report one more measurement pass after the paint;
     // give them a frame before reading the counters.
     await afterPaint()
-    const reactCommit = sum(commitDurations)
-    const printMeasurement = sum(collected['print-measurement'])
-    const persistence = sum(collected.persistence)
     samples.push({
       editToPaint: painted - start,
-      // Summed per iteration, not per metric, so the reported p95 is the p95 of
-      // the real total. Each part is timed where it runs, so deferring work past
-      // the handler cannot hide it.
-      instrumentedWork: reactCommit + printMeasurement + persistence,
+      // Measured, not summed from parts: the edit until the end of the task
+      // holding React's last commit for it. It contains every phase, including
+      // the DOM mutation no component metric below reports, and is measured the
+      // same way whether React worked inside the handler or in a later task. It
+      // can land marginally after the first paint when the measurement pass
+      // forces a second commit. An interaction that commits nothing falls back
+      // to the handler, which is then the whole of its work.
+      editToLastCommit: lastCommitTaskEnd > 0 ? lastCommitTaskEnd - start : handlerReturn,
       handlerReturn,
-      reactCommit,
-      printMeasurement,
+      reactRender: sum(renderDurations),
+      printMeasurement: sum(collected['print-measurement']),
       printMeasurementCount: collected['print-measurement'].length,
-      persistence,
+      persistence: sum(collected.persistence),
     })
   }
 
@@ -217,9 +234,9 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
     editToPaintP50: pick((sample) => sample.editToPaint, 0.5),
     editToPaintP95: pick((sample) => sample.editToPaint, 0.95),
     editToPaintMax: pick((sample) => sample.editToPaint, 1),
-    instrumentedWorkP95: pick((sample) => sample.instrumentedWork, 0.95),
+    editToLastCommitP95: pick((sample) => sample.editToLastCommit, 0.95),
     handlerReturnP95: pick((sample) => sample.handlerReturn, 0.95),
-    reactCommitP95: pick((sample) => sample.reactCommit, 0.95),
+    reactRenderP95: pick((sample) => sample.reactRender, 0.95),
     printMeasurementP95: pick((sample) => sample.printMeasurement, 0.95),
     printMeasurementCountP95: pick((sample) => sample.printMeasurementCount, 0.95),
     persistenceP95: pick((sample) => sample.persistence, 0.95),
@@ -254,8 +271,13 @@ export const runHarness = async (): Promise<void> => {
     <StrictMode>
       <Profiler
         id="app"
+        // `actualDuration` is the render phase only — it excludes the DOM
+        // mutation and the rest of the commit phase — so it is reported as
+        // render duration and no budget is read from it. The posted message is
+        // what times the commit: see `lastCommitTaskEnd`.
         onRender={(_id, _phase, actualDuration) => {
-          commitDurations.push(actualDuration)
+          renderDurations.push(actualDuration)
+          commitTaskProbe.port2.postMessage(0)
         }}
       >
         <App />

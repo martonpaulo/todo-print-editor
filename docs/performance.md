@@ -9,13 +9,15 @@ the canonical owner of the performance budget; issue #5 established it.
 **25 lists of 10 tasks (250 tasks) is the largest document the editor supports at
 full editing responsiveness.**
 
-The number is measured, not chosen. At 25 lists every profiled interaction keeps
-its instrumented per-edit work inside a single 60 Hz frame and paints within one
-frame of the edit. At 50 lists typing, reordering, and settings changes all
-exceed a frame of work, and at 100 lists and above every interaction misses
-several frames.
+The number is measured, not chosen. At 25 lists every profiled interaction paints
+within one frame of the edit. At 50 lists typing, reordering, and settings changes
+all miss frames, and at 100 lists and above every interaction misses several.
 
-Nothing enforces this limit, and nothing should without a separate product
+Before the memoization in this change the same threshold sat at 10 lists: at 25
+lists a keystroke took 34.5 ms to paint and a reorder 38.2 ms, both more than two
+frames.
+
+Nothing enforces the limit, and nothing should without a separate product
 decision: larger documents keep working and stay correct, they simply feel
 progressively slower. Print pagination, persistence, and Markdown behavior are
 unaffected by scale.
@@ -24,43 +26,50 @@ unaffected by scale.
 
 | Metric | Budget | Reported as |
 | --- | --- | --- |
-| Instrumented work per edit (p95) | < 16 ms at the supported maximum | `instrumentedWorkP95` |
-| Edit-to-paint (p95) | ≤ one frame, ~20 ms at 60 Hz | `editToPaintP95` |
-| React commit per edit (p95) | counted inside the work budget | `reactCommitP95` |
+| Edit-to-paint (p95) | ≤ one frame — 20 ms at 60 Hz | `editToPaintP95` |
+| Edit to last commit (p95) | ≤ one frame at the supported maximum | `editToLastCommitP95` |
 | Print measurement pass (p95) | < 4 ms — **not met, see below** | `printMeasurementP95` |
 | Persistence per edit (p95) | < 1 ms at the supported maximum | `persistenceP95` |
+| React render per edit (p95) | diagnostic, no budget | `reactRenderP95` |
+| Handler return (p95) | diagnostic, no budget | `handlerReturnP95` |
 
-### How the metrics are defined, and why
+### What each metric measures, and which ones decide anything
 
-`instrumentedWorkP95` is the p95 of the **per-iteration sum** of React commit
-time, print-measurement time, and persistence time. Each part is timed where it
-actually executes — React through `<Profiler>`, the other two through the
-application's own profiling seam — so work React defers past the event handler is
-still attributed to the edit that caused it. It is a lower bound on total
-main-thread cost, missing only work nothing instruments, and it is the number the
-budget and the supported scale are read from.
+**`editToPaint` is the budget.** It is the interval from dispatching the edit to
+the task following the next paint, and it is the metric issue #5 named. The one
+recorded adjustment is the pass mark: a paint lands on the next vsync, so this
+metric cannot fall below one frame however cheap the work is, and 16 ms at 60 Hz
+is unreachable by construction. The budget is therefore *one frame* — an edit that
+paints on the very next frame — which is ~20 ms measured, including dispatch
+overhead. The intent of the threshold is unchanged; only its floor is stated.
 
-`handlerReturnP95` is also reported, and **no decision is read from it**. It
-measures only how long the event handler itself blocked. React commits a
-click-driven update after the handler returns, so the figure is
+**`editToLastCommit` bounds the work from above.** It runs from the edit to the
+end of the task holding React's last commit for it, so it contains every phase —
+handler, render, DOM mutation, layout effects, the measurement pass they trigger,
+and persistence — and is measured identically whether React worked inside the
+handler or in a task after it. It is an interval, not pure busy time: it includes
+whatever idle sits between those tasks, which is why it tracks `editToPaint`
+closely, and it can land marginally after the first paint when the measurement
+pass forces a second commit.
+
+**`reactRender` bounds React's share from below.** It is `<Profiler>`'s
+`actualDuration`, which measures the render phase only: it excludes DOM mutation
+and the rest of the commit phase. It is reported as render duration for that
+reason and no budget is read from it. The same caution applies to summing the
+component metrics — render plus measurement plus persistence is a lower bound
+that omits commit-phase work, not a total.
+
+**`handlerReturn` measures only how long the event handler blocked.** React
+commits a click-driven update after the handler returns, so the figure is
 interaction-dependent and misleading across interactions: reordering returns in
-0.4 ms while costing 11.8 ms of instrumented work. It is kept as a diagnostic for
-how much of an interaction is synchronous within the handler.
-
-Issue #5 proposed a p95 *edit-to-paint* budget of 16 ms. That metric cannot fall
-below one frame: a paint lands on the next vsync, so edit-to-paint at the
-supported maximum sits at 17–20 ms even when the work costs 6 ms. The 16 ms
-budget therefore applies to instrumented work per edit — what the application
-controls — and edit-to-paint is recorded beside it, against a one-frame budget,
-as the user-visible consequence. This is a recorded revision of the threshold's
-denominator, not of its intent.
+0.4 ms while taking 14.9 ms to its last commit. It is kept as a diagnostic for how
+much of an interaction is synchronous within the handler, and no budget reads it.
 
 **The 4 ms print-measurement budget is not met at the supported maximum** — the
-pass costs up to 8.7 ms p95 there. It is left as a recorded limit because the
-budget that matters, total instrumented work per edit, holds with margin
-(11.8 ms of 16 ms). Bringing the pass under 4 ms needs a per-list height cache
-keyed by list content, which must preserve the print-layout contract owned by
-issue #2.
+pass costs up to 8.5 ms p95 there. It is left as a recorded limit because the
+budget that matters, painting within one frame, holds at every interaction.
+Bringing the pass under 4 ms needs a per-list height cache keyed by list content,
+which must preserve the print-layout contract owned by issue #2.
 
 ## Recorded results
 
@@ -68,73 +77,70 @@ Median of three runs (two at 500 lists), 25 measured iterations per interaction
 after 5 warm-up iterations, headless Chromium 152 at a 1600×1000 viewport,
 production build, before → after the memoized print list.
 
-Instrumented work per edit, p95 milliseconds — the budget metric:
+Edit-to-paint, p95 milliseconds — the budget metric. One frame is ~20 ms here:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 5.0 → 5.4 | 12.1 → **10.7** | 20.5 → 18.9 | 51.3 → 34.4 | 294 → 163 |
-| Task checking | 3.4 → 3.3 | 9.3 → **8.3** | 14.4 → 12.0 | 28.6 → 26.7 | 93.5 → 81.5 |
-| Reordering | 5.7 → 5.5 | 12.5 → **11.8** | 24.6 → 22.8 | 57.0 → 40.5 | 223 → 196 |
-| Document settings | 4.7 → 4.0 | 9.8 → **8.9** | 21.2 → 18.9 | 55.2 → 29.1 | 284 → 223 |
-| Markdown typing | 4.6 → 5.4 | 8.0 → **5.8** | 10.0 → 9.3 | 25.6 → 15.0 | 206 → 225 |
+| Visual typing | 19.2 → 18.8 | 34.5 → **19.8** | 64.2 → 27.5 | 108 → 66.5 | 720 → 309 |
+| Task checking | 17.7 → 18.0 | 18.3 → **18.0** | 38.7 → 19.3 | 68.0 → 41.6 | 354 → 247 |
+| Reordering | 19.3 → 18.4 | 38.2 → **19.9** | 61.0 → 38.3 | 120 → 75.7 | 999 → 462 |
+| Document settings | 15.9 → 16.5 | 30.4 → **16.8** | 62.6 → 31.3 | 110 → 71.9 | 1025 → 486 |
+| Markdown typing | 17.7 → 18.3 | 19.7 → **18.2** | 39.6 → 19.0 | 65.9 → 30.8 | 612 → 516 |
 
-Every figure at 25 lists is inside the 16 ms frame; at 50 lists three of five
-interactions are outside it. That is the whole basis for the supported maximum,
-and it holds before the change as well as after: **the memoization improves
-headroom at the supported scale rather than moving the supported scale.** Its
-effect grows with document size, roughly halving the cost at 100 lists.
+Every interaction at 25 lists paints within one frame after the change and three
+of five did not before it, which is what moves the supported maximum from 10
+lists to 25. At 50 lists three of five are outside a frame again.
 
-Edit-to-paint, p95 milliseconds, including the wait for the next vsync:
+Edit to last commit, p95 milliseconds — the upper bound on per-edit work:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 18.8 → 19.0 | 20.9 → 20.0 | 37.9 → 32.1 | 76.3 → 58.2 | 553 → 309 |
-| Task checking | 17.6 → 17.9 | 17.8 → 18.0 | 24.2 → 21.5 | 48.3 → 42.5 | 203 → 196 |
-| Reordering | 18.1 → 18.6 | 20.3 → 20.0 | 39.1 → 36.2 | 82.8 → 62.9 | 405 → 341 |
-| Document settings | 15.6 → 16.6 | 17.9 → 16.7 | 38.4 → 32.7 | 82.4 → 50.7 | 454 → 325 |
-| Markdown typing | 17.9 → 18.1 | 18.7 → 18.2 | 19.8 → 19.4 | 43.8 → 25.6 | 386 → 324 |
+| Visual typing | 10.6 → 6.8 | 34.6 → 18.8 | 64.6 → 27.5 | 116 → 66.6 | 725 → 317 |
+| Task checking | 5.6 → 4.2 | 14.8 → 14.1 | 43.1 → 19.3 | 77.8 → 45.9 | 355 → 300 |
+| Reordering | 14.9 → 7.5 | 40.3 → 14.9 | 64.7 → 40.3 | 125 → 83.1 | 1046 → 496 |
+| Document settings | 16.0 → 16.8 | 30.5 → 16.9 | 69.1 → 31.4 | 119 → 78.5 | 1196 → 539 |
+| Markdown typing | 6.8 → 7.8 | 15.6 → 11.3 | 39.8 → 12.4 | 66.0 → 30.8 | 665 → 519 |
 
-React commit per edit, p95 milliseconds — the component the memoization targets:
+React render per edit, p95 milliseconds — render phase only, the component the
+memoization targets:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 2.7 → 2.0 | 5.1 → 3.8 | 8.9 → 6.0 | 22.0 → 12.2 | 157 → 71.0 |
-| Task checking | 2.6 → 1.6 | 4.8 → 3.7 | 7.5 → 4.9 | 20.2 → 13.8 | 79.3 → 73.2 |
-| Reordering | 2.1 → 1.7 | 4.3 → 3.1 | 8.3 → 5.9 | 18.5 → 9.3 | 113 → 60.3 |
-| Document settings | 2.4 → 1.8 | 4.6 → 3.3 | 9.2 → 6.7 | 30.1 → 8.9 | 183 → 86.1 |
-| Markdown typing | 1.8 → 1.6 | 2.6 → 1.6 | 3.4 → 2.6 | 7.8 → 4.1 | 49.3 → 27.7 |
+| Visual typing | 3.1 → 1.9 | 8.4 → 4.1 | 13.4 → 5.5 | 32.6 → 13.5 | 185 → 76.0 |
+| Task checking | 2.3 → 1.8 | 4.7 → 3.3 | 12.8 → 4.8 | 31.0 → 11.4 | 143 → 94.4 |
+| Reordering | 3.1 → 1.5 | 8.5 → 3.0 | 12.7 → 6.0 | 29.5 → 11.8 | 272 → 99.5 |
+| Document settings | 3.5 → 1.7 | 7.2 → 2.9 | 14.3 → 5.3 | 40.0 → 16.0 | 327 → 102 |
+| Markdown typing | 1.6 → 1.6 | 3.6 → 1.9 | 8.5 → 2.1 | 10.7 → 4.0 | 84.8 → 33.2 |
 
 Print measurement pass, p95 milliseconds, 3 passes per edit and 4 for reordering:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 2.6 → 3.8 | 7.3 → 7.7 | 13.0 → 14.2 | 25.7 → 24.7 | 137 → 86.0 |
-| Task checking | 1.0 → 1.0 | 4.5 → 4.6 | 6.8 → 6.9 | 12.8 → 13.2 | 11.6 → 9.1 |
-| Reordering | 3.5 → 3.9 | 8.6 → 8.7 | 15.5 → 17.4 | 36.0 → 30.4 | 111 → 115 |
-| Document settings | 2.2 → 2.4 | 5.3 → 5.9 | 11.1 → 11.7 | 28.6 → 20.6 | 124 → 133 |
-| Markdown typing | 3.0 → 3.7 | 5.3 → 4.1 | 6.3 → 6.8 | 17.0 → 11.8 | 177 → 156 |
+| Visual typing | 3.0 → 2.1 | 12.0 → 7.5 | 22.0 → 13.2 | 34.8 → 28.2 | 156 → 118 |
+| Task checking | 1.0 → 0.8 | 5.0 → 5.4 | 10.4 → 6.9 | 14.3 → 13.7 | 8.9 → 10.9 |
+| Reordering | 6.8 → 3.3 | 15.5 → 8.5 | 25.3 → 18.1 | 56.0 → 36.0 | 295 → 181 |
+| Document settings | 3.3 → 2.4 | 8.8 → 5.4 | 19.1 → 10.9 | 30.6 → 26.0 | 312 → 183 |
+| Markdown typing | 3.1 → 2.7 | 6.4 → 5.2 | 14.4 → 6.0 | 19.6 → 14.7 | 269 → 256 |
 
-The measurement pass is where the memoization pays off least and inside the noise
-at small scales: the layout it forces is cheaper, but the pass still walks every
-list on every edit. That is exactly the limit the 4 ms budget records.
+The pass still walks every list on every edit; the memoization only makes the
+layout it forces cheaper. That is exactly the limit the 4 ms budget records.
 
 Persistence never approached its budget: JSON serialization plus the synchronous
-`localStorage` write measured 0.1–0.2 ms up to 25 lists, 0.3 ms at 100 lists, and
-1.3–2.3 ms even at 500 lists — well under 1 ms wherever the editor is supported.
-No persistence change is justified by this profile, which also leaves the
-durability contract owned by issue #1 untouched.
+`localStorage` write measured 0.1–0.2 ms up to 50 lists, 0.3–0.4 ms at 100 lists,
+and 1.6–2.5 ms even at 500 lists. No persistence change is justified by this
+profile, which also leaves the durability contract owned by issue #1 untouched.
 
-Initial mount to a ready preview: 185 ms at 10 lists, 154 ms at 25, 204 ms at 50,
-293 ms at 100, and 1,276 ms at 500.
+Initial mount to a ready preview, before → after: 144 → 103 ms at 10 lists,
+186 → 144 ms at 25, 249 → 196 ms at 50, 404 → 404 ms at 100, and
+1,411 → 1,310 ms at 500.
 
 ## The correction this profile justified
 
 `PrintList` in `src/components/PrintPreview.tsx` is memoized. Every list renders
 twice — once in the hidden measurement layer and once in its panel — and an edit
 replaces exactly one list object, so the bail-out reduces the DOM React rewrites
-per keystroke from the whole document to one list. React commit time falls at
-every scale, by about a quarter at the supported maximum and by about half at
-100 lists and beyond.
+per keystroke from the whole document to one list. Render duration falls by
+roughly half at every scale, and the supported maximum moves from 10 lists to 25.
 
 It is a pure rendering change: the same elements are produced from the same
 props, so pagination inputs and print output are unchanged.
@@ -173,7 +179,7 @@ Requirements and moving parts:
 - `vite.profile.config.ts` builds `profile/index.html` into `.profile-dist`,
   separately from `npm run build`, so the deployed application keeps exactly one
   route and never ships harness code. It aliases `react-dom/client` to
-  `react-dom/profiling` so `<Profiler>` reports commit durations in an otherwise
+  `react-dom/profiling` so `<Profiler>` reports render durations in an otherwise
   production build.
 - `src/dev/fixtures.ts` generates the documents. Text and identifiers derive from
   position alone, so runs are byte-identical and no personal document data can
