@@ -40,13 +40,17 @@ const readArgument = (name, fallback) => {
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
+/** A failure that must abort the run instead of being retried until the deadline. */
+class TerminalError extends Error {}
+
 const waitFor = async (probe, description, timeoutMs = 60_000) => {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       const result = await probe()
       if (result) return result
-    } catch {
+    } catch (error) {
+      if (error instanceof TerminalError) throw error
       // not ready yet
     }
     await wait(500)
@@ -134,7 +138,8 @@ const METRICS = [
   'editToPaintP50',
   'editToPaintP95',
   'editToPaintMax',
-  'synchronousWorkP95',
+  'instrumentedWorkP95',
+  'handlerReturnP95',
   'reactCommitP95',
   'printMeasurementP95',
   'printMeasurementCountP95',
@@ -179,7 +184,7 @@ const runScale = async ({ lists, tasks, iterations, warmup }) => {
     const session = await DevToolsSession.connect(target.webSocketDebuggerUrl)
     try {
       const failure = await session.evaluate('window.__profileError ?? null')
-      if (failure) throw new Error(`Harness failed: ${failure}`)
+      if (failure) throw new TerminalError(`Harness failed: ${failure}`)
       return await session.evaluate('window.__profileReport ?? null')
     } finally {
       session.close()

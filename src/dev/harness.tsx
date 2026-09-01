@@ -21,7 +21,8 @@ const STORAGE_KEY = 'todo-print-editor.document.v1'
 
 interface Sample {
   editToPaint: number
-  synchronousWork: number
+  instrumentedWork: number
+  handlerReturn: number
   reactCommit: number
   printMeasurement: number
   printMeasurementCount: number
@@ -34,7 +35,8 @@ interface Summary {
   editToPaintP50: number
   editToPaintP95: number
   editToPaintMax: number
-  synchronousWorkP95: number
+  instrumentedWorkP95: number
+  handlerReturnP95: number
   reactCommitP95: number
   printMeasurementP95: number
   printMeasurementCountP95: number
@@ -178,18 +180,28 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
     resetCounters()
     const start = performance.now()
     scenario.step(iteration)
-    const synchronousWork = performance.now() - start
+    // A lower bound only: React commits a click-driven update after the handler
+    // returns, so this misses work that the instrumented totals below still
+    // capture. Kept as a diagnostic; no budget is read from it.
+    const handlerReturn = performance.now() - start
     const painted = await afterPaint()
     // Layout observers can report one more measurement pass after the paint;
     // give them a frame before reading the counters.
     await afterPaint()
+    const reactCommit = sum(commitDurations)
+    const printMeasurement = sum(collected['print-measurement'])
+    const persistence = sum(collected.persistence)
     samples.push({
       editToPaint: painted - start,
-      synchronousWork,
-      reactCommit: sum(commitDurations),
-      printMeasurement: sum(collected['print-measurement']),
+      // Summed per iteration, not per metric, so the reported p95 is the p95 of
+      // the real total. Each part is timed where it runs, so deferring work past
+      // the handler cannot hide it.
+      instrumentedWork: reactCommit + printMeasurement + persistence,
+      handlerReturn,
+      reactCommit,
+      printMeasurement,
       printMeasurementCount: collected['print-measurement'].length,
-      persistence: sum(collected.persistence),
+      persistence,
     })
   }
 
@@ -205,7 +217,8 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
     editToPaintP50: pick((sample) => sample.editToPaint, 0.5),
     editToPaintP95: pick((sample) => sample.editToPaint, 0.95),
     editToPaintMax: pick((sample) => sample.editToPaint, 1),
-    synchronousWorkP95: pick((sample) => sample.synchronousWork, 0.95),
+    instrumentedWorkP95: pick((sample) => sample.instrumentedWork, 0.95),
+    handlerReturnP95: pick((sample) => sample.handlerReturn, 0.95),
     reactCommitP95: pick((sample) => sample.reactCommit, 0.95),
     printMeasurementP95: pick((sample) => sample.printMeasurement, 0.95),
     printMeasurementCountP95: pick((sample) => sample.printMeasurementCount, 0.95),
