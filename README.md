@@ -88,6 +88,8 @@ npm run check
 
 Tests cover Markdown conversion, persisted-data validation, and atomic pagination. Pixel snapshots are intentionally omitted because they do not prove physical print dimensions.
 
+`npm run profile` drives a production build in a headless Chromium and reports the editing-latency profile. `docs/performance.md` records the supported document scale, the budget, and the measured results.
+
 ## Privacy and security
 
 Todo content is stored only in this browser under `localStorage`. The app has no backend, account system, analytics, or content API. Clearing site data removes the saved document.
@@ -101,6 +103,7 @@ Pull requests run lint, tests, and a production build. A validated push to `main
 - Only the documented Markdown subset round-trips to the visual model.
 - Content does not sync between browsers or devices.
 - A single list cannot exceed one panel; shorten it before printing.
+- Editing stays inside one frame up to 25 lists of 10 tasks; larger documents keep working but feel progressively slower. See `docs/performance.md`.
 - Exact physical output depends on 100% print scale and printer-driver behavior.
 - The public utility opts out of search indexing, but `noindex` is not access control.
 
