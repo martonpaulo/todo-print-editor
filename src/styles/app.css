@@ -344,6 +344,20 @@ body,
   background: var(--surface-subtle);
 }
 
+/* The checkbox stays the semantic control; its label supplies a hit target as
+   tall as the task row so the most frequent action is not a 16 px target. */
+.task-editor-row__checkbox-label {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  min-height: var(--control-height-compact);
+  /* Negative block margins let the target cover the row's own padding, so it
+     matches the full row height without making the row taller. */
+  margin-block: calc(var(--space-1) * -1);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-1);
+  cursor: pointer;
+}
 .task-editor-row__checkbox {
   width: 1rem;
   height: 1rem;

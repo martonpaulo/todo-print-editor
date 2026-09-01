@@ -54,7 +54,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: COPY.visualMode }))
     const titles = screen
-      .getAllByLabelText(COPY.listTitle)
+      .getAllByRole('textbox', { name: /^Title of / })
       .map((input) => (input as HTMLInputElement).value)
     expect(titles).toEqual([
       COPY.starter.priorities,

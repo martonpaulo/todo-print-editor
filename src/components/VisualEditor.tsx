@@ -111,12 +111,14 @@ export const VisualEditor = ({
           }
 
           const currentListNumber = listNumbers.get(block.id) ?? 1
+          const listContext = COPY.listContext(currentListNumber, block.title)
           const isOverflowing = overflowListIds.includes(block.id)
 
           return (
             <section
               className={`list-card${isOverflowing ? ' list-card--overflow' : ''}`}
               key={block.id}
+              aria-label={listContext}
             >
               <header className="list-card__header">
                 <span className="eyebrow">{COPY.listNumber(currentListNumber, listNumbers.size)}</span>
@@ -125,7 +127,7 @@ export const VisualEditor = ({
                     className="icon-button"
                     type="button"
                     disabled={blockIndex === 0}
-                    aria-label={COPY.moveListUp}
+                    aria-label={COPY.moveListUpLabel(listContext)}
                     title={COPY.moveListUp}
                     onClick={() => moveBlock(block.id, -1)}
                   >
@@ -135,7 +137,7 @@ export const VisualEditor = ({
                     className="icon-button"
                     type="button"
                     disabled={blockIndex === document.blocks.length - 1}
-                    aria-label={COPY.moveListDown}
+                    aria-label={COPY.moveListDownLabel(listContext)}
                     title={COPY.moveListDown}
                     onClick={() => moveBlock(block.id, 1)}
                   >
@@ -144,7 +146,7 @@ export const VisualEditor = ({
                   <button
                     className="icon-button"
                     type="button"
-                    aria-label={COPY.removeList}
+                    aria-label={COPY.removeListLabel(listContext)}
                     title={COPY.removeList}
                     onClick={() => removeBlock(block.id)}
                   >
@@ -154,7 +156,7 @@ export const VisualEditor = ({
               </header>
 
               <label className="sr-only" htmlFor={`title-${block.id}`}>
-                {COPY.listTitle}
+                {COPY.listTitleLabel(listContext)}
               </label>
               <input
                 id={`title-${block.id}`}
@@ -167,70 +169,85 @@ export const VisualEditor = ({
               />
 
               <div className="task-editor-list">
-                {block.items.map((item, itemIndex) => (
-                  <div className="task-editor-row" key={item.id}>
-                    <input
-                      className="task-editor-row__checkbox"
-                      type="checkbox"
-                      checked={item.checked}
-                      aria-label={COPY.taskCompleteLabel(item.text)}
-                      onChange={(event) =>
-                        updateItem(block.id, item.id, (entry) => ({
-                          ...entry,
-                          checked: event.target.checked,
-                        }))
-                      }
-                    />
-                    <input
-                      id={`item-${item.id}`}
-                      className="task-editor-row__input"
-                      value={item.text}
-                      placeholder={COPY.taskPlaceholder}
-                      onChange={(event) =>
-                        updateItem(block.id, item.id, (entry) => ({
-                          ...entry,
-                          text: event.target.value,
-                        }))
-                      }
-                      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          addItemAfter(block.id, item.id)
-                        }
+                {block.items.map((item, itemIndex) => {
+                  const taskContext = COPY.taskContext(itemIndex + 1, item.text)
 
-                        if (event.key === 'Backspace' && !item.text && block.items.length > 1) {
-                          event.preventDefault()
+                  return (
+                    <div className="task-editor-row" key={item.id}>
+                      {/* The label wraps the checkbox alone so the row-height hit
+                          target never swallows pointer events meant for the text
+                          field or the remove button. */}
+                      <label className="task-editor-row__checkbox-label">
+                        <input
+                          className="task-editor-row__checkbox"
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={(event) =>
+                            updateItem(block.id, item.id, (entry) => ({
+                              ...entry,
+                              checked: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span className="sr-only">
+                          {COPY.taskCompleteLabel(taskContext, listContext)}
+                        </span>
+                      </label>
+                      <label className="sr-only" htmlFor={`item-${item.id}`}>
+                        {COPY.taskTextLabel(taskContext, listContext)}
+                      </label>
+                      <input
+                        id={`item-${item.id}`}
+                        className="task-editor-row__input"
+                        value={item.text}
+                        placeholder={COPY.taskPlaceholder}
+                        onChange={(event) =>
+                          updateItem(block.id, item.id, (entry) => ({
+                            ...entry,
+                            text: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            addItemAfter(block.id, item.id)
+                          }
+
+                          if (event.key === 'Backspace' && !item.text && block.items.length > 1) {
+                            event.preventDefault()
+                            removeItem(
+                              block.id,
+                              item.id,
+                              block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
+                            )
+                          }
+                        }}
+                      />
+                      <button
+                        className="icon-button icon-button--quiet"
+                        type="button"
+                        aria-label={COPY.removeTaskLabel(taskContext, listContext)}
+                        title={COPY.removeTask}
+                        onClick={() =>
                           removeItem(
                             block.id,
                             item.id,
                             block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
                           )
                         }
-                      }}
-                    />
-                    <button
-                      className="icon-button icon-button--quiet"
-                      type="button"
-                      aria-label={COPY.removeTask}
-                      title={COPY.removeTask}
-                      onClick={() =>
-                        removeItem(
-                          block.id,
-                          item.id,
-                          block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
-                        )
-                      }
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </div>
-                ))}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
 
               <button
                 id={`add-task-${block.id}`}
                 className="text-button"
                 type="button"
+                aria-label={COPY.addTaskLabel(listContext)}
                 onClick={() => addItemAfter(block.id)}
               >
                 <Icon name="plus" size={16} />
