@@ -178,8 +178,13 @@ describe('printed page geometry', () => {
       })
       expect(measured.page.heightMm).toBeLessThanOrEqual(contract.pageHeightMm + 0.05)
     } finally {
-      await page.emulateMediaType(null)
+      // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
+      await page.emulateMediaType(undefined)
     }
+
+    // Prove the emulation was actually lifted, so a later test cannot silently inherit print media.
+    const restored = await measureSheet()
+    expect(restored.page.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
   })
 
   it('prints a sheet of the recorded physical size', async () => {
