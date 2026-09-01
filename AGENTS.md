@@ -26,8 +26,8 @@
 - Delete branches after merge: enabled.
 - Default branch review policy: require one approving review and the recorded status checks for orchestrated pull requests once the approving GitHub App installation and required checks are verified. Enforcement is pending.
 - Release, signing, and secret-storage policy: validated pushes to `main` deploy the static build to GitHub Pages through GitHub Actions. Use only the repository-scoped `GITHUB_TOKEN`; there are no release artifacts, signing identities, or project secrets.
-- Skills baseline revision: `10d02773253766a032f490f1a5ec27d2157f3281`
-- Skills baseline applied: `2026-08-31`
+- Skills baseline revision: `665b67a3aef31c4a57bc70ee7f984ee5b0a9e124`
+- Skills baseline applied: `2026-09-01`
 
 Treat these values as stable project decisions. Change an established identifier, license, visibility, branch policy, versioning model, localization strategy, landing-page contract, agent-automation decision, or release policy only through an explicit task that describes the migration and downstream effects.
 
@@ -78,7 +78,11 @@ Rules for any executor working from a clone of this repository, including cloud 
 - Branch as `<type>/<agent>/issue-<n>/<short-slug>`; commit with Conventional Commits, with the subject ending in `(#<n>)`.
 - Never push to `main` and never merge: open a pull request and stop. Merge belongs to the owner, or to GitHub auto-merge under the predicates recorded in `.ao/worker-rules.md`.
 - Start the pull request body with one `Closes #<n>` line per resolved issue, then document the problem, implementation, tests with results, and residual risk.
-- Do not touch: `AGENTS.md`, `docs/product.md`, `LICENSE`, `.ao/**`, `.github/workflows/**`.
+- Do not touch: `docs/product.md`, `LICENSE`, `.ao/**`, `.github/workflows/**`.
+- `AGENTS.md` is protected by section, not as a file. `## Project identity and policy` is
+  governance and never moves under an executor. Every other section, `## Patterns` above all, is
+  documentation of this code — so a change that makes a recorded pattern untrue updates it in the
+  same pull request, and a change that establishes a new one stops and asks first.
 - When a needed decision is not written in the issue, comment exactly what is missing, apply `status: needs-decision`, and stop instead of guessing.
 
 ## Before editing
