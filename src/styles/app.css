@@ -23,8 +23,7 @@ body,
 .primary-button,
 .secondary-button,
 .text-button,
-.mode-switcher__button,
-.print-dialog-hint {
+.mode-switcher__button {
   display: flex;
   align-items: center;
 }
@@ -49,6 +48,19 @@ body,
   padding-top: var(--space-3);
   /* One-off divider tint: this rule is deliberately fainter than --border-subtle. */
   border-top: var(--border-width) solid var(--color-surface-strong);
+}
+
+/* The hint sits in the wrapping toolbar row beside the print action; a full
+   basis keeps it on its own line at every width instead of squeezing the
+   controls it describes. */
+.print-dialog-hint {
+  flex-basis: 100%;
+  max-width: 44rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .toggle-control {
@@ -537,18 +549,6 @@ body,
 
 .print-page {
   transform-origin: top left;
-}
-
-.print-dialog-hint {
-  justify-content: center;
-  gap: var(--space-2);
-  max-width: 40rem;
-  margin: 0 auto var(--space-8);
-  padding: 0 var(--space-6);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  text-align: center;
 }
 
 @media (max-width: 1080px) {
