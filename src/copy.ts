@@ -1,3 +1,12 @@
+import type { MarkdownErrorCode } from './domain/types'
+
+const MARKDOWN_ERROR_MESSAGES = {
+  'duplicate-date': 'Use only one document date.',
+  'invalid-date': 'Use an ISO date such as “# 2026-08-24”.',
+  'task-without-list': 'Add a “## List title” before its tasks.',
+  'unrecognized-line': 'Use checklist items such as “- [ ] Task”.',
+} satisfies Record<MarkdownErrorCode, string>
+
 export const COPY = {
   appName: 'Todo Print Editor',
   appTagline: 'A calm workspace for paper plans.',
@@ -18,7 +27,9 @@ export const COPY = {
   printBlockedDescription:
     'Return to the editor and resolve layout overflow or Markdown errors before printing.',
   editorTitle: 'Build your lists',
+  editorRegion: 'Editor',
   previewTitle: 'Print preview',
+  previewRegion: 'Preview',
   addList: 'Add list',
   addPanel: 'Add panel',
   addTask: 'Add task',
@@ -33,8 +44,8 @@ export const COPY = {
   panelBreakDescription: 'Everything below starts on a fresh 99 × 210 mm panel.',
   removePanelBreak: 'Remove panel break',
   markdownLabel: 'Markdown source',
-  markdownHint: 'Use ## for lists, - [ ] for tasks, and --- for a new panel.',
-  markdownDateHint: 'Optional date: # 2026-08-24',
+  markdownHelp:
+    'Use ## for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
   markdownInvalid: 'Previewing the last valid version',
   overflowTitle: 'One list is too tall for a panel.',
   overflowDescription: 'Shorten the highlighted list before printing. Lists are never split.',
@@ -58,4 +69,9 @@ export const COPY = {
   panelNumber: (current: number, total: number) => `Panel ${current} / ${total}`,
 
   taskCompleteLabel: (task: string) => `Mark “${task || 'Untitled task'}” complete`,
+
+  markdownErrors: MARKDOWN_ERROR_MESSAGES,
+
+  markdownErrorLine: (line: number, code: MarkdownErrorCode) =>
+    `Line ${line}: ${MARKDOWN_ERROR_MESSAGES[code]}`,
 } as const

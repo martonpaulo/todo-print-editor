@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { COPY } from '../copy'
 import { MarkdownEditor } from './MarkdownEditor'
 
 const getTextarea = (): HTMLTextAreaElement =>
@@ -85,4 +86,74 @@ describe('MarkdownEditor', () => {
 
     expect(onChange).toHaveBeenCalledWith('## List\n- [x] Done\n')
   })
+
+  it('shows the Markdown help and describes the textarea with it when there are no errors', () => {
+    render(<MarkdownEditor value="" errors={[]} onChange={vi.fn()} />)
+
+    const help = screen.getByText(COPY.markdownHelp)
+
+    expect(help).toBeVisible()
+    expect(help).toHaveAttribute('id', 'markdown-help')
+    expect(getTextarea()).toHaveAttribute('aria-describedby', 'markdown-help')
+  })
+
+  it('adds the live error region to the description while keeping the help', () => {
+    render(
+      <MarkdownEditor
+        value={'## List\nThis would be lost'}
+        errors={[{ line: 2, code: 'unrecognized-line' }]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(COPY.markdownHelp)).toBeVisible()
+    expect(getTextarea()).toHaveAttribute(
+      'aria-describedby',
+      'markdown-help markdown-errors',
+    )
+  })
+
+  it('renders one centralized line-specific message per error', () => {
+    render(
+      <MarkdownEditor
+        value={'# nope\n- [ ] Orphan'}
+        errors={[
+          { line: 1, code: 'invalid-date' },
+          { line: 2, code: 'task-without-list' },
+        ]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(COPY.markdownErrorLine(1, 'invalid-date')),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(COPY.markdownErrorLine(2, 'task-without-list')),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the static help outside the live region so edits announce errors only', () => {
+    const { rerender } = render(
+      <MarkdownEditor value="" errors={[]} onChange={vi.fn()} />,
+    )
+
+    const liveRegion = document.getElementById('markdown-errors') as HTMLElement
+    expect(liveRegion).toHaveAttribute('aria-live', 'polite')
+    expect(liveRegion).not.toHaveTextContent(COPY.markdownHelp)
+
+    rerender(
+      <MarkdownEditor
+        value="oops"
+        errors={[{ line: 1, code: 'unrecognized-line' }]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(liveRegion).toHaveTextContent(
+      COPY.markdownErrorLine(1, 'unrecognized-line'),
+    )
+    expect(liveRegion).not.toHaveTextContent(COPY.markdownHelp)
+  })
 })
+

@@ -89,7 +89,7 @@ const App = () => {
   return (
     <div className={`app-shell${canPrint ? '' : ' app-shell--print-blocked'}`}>
       <main className="workspace">
-        <section className="editor-pane screen-only" aria-label="Editor">
+        <section className="editor-pane screen-only" aria-label={COPY.editorRegion}>
           <header className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
             <div className="toolbar-group">
               <label className="toggle-control">
@@ -188,7 +188,7 @@ const App = () => {
           </div>
         </section>
 
-        <section className="preview-pane" aria-label="Preview">
+        <section className="preview-pane" aria-label={COPY.previewRegion}>
 
           {layoutStatus.overflowListIds.length > 0 && (
             <div className="overflow-banner screen-only" role="alert">

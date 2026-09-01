@@ -26,9 +26,15 @@ export interface TodoDocument {
   blocks: DocumentBlock[]
 }
 
+export type MarkdownErrorCode =
+  | 'duplicate-date'
+  | 'invalid-date'
+  | 'task-without-list'
+  | 'unrecognized-line'
+
 export interface MarkdownError {
   line: number
-  message: string
+  code: MarkdownErrorCode
 }
 
 export interface MarkdownParseResult {

@@ -60,12 +60,18 @@ export const MarkdownEditor = ({ value, errors, onChange }: MarkdownEditorProps)
         className="markdown-editor__textarea"
         value={value}
         aria-invalid={errors.length > 0}
-        aria-describedby="markdown-errors"
+        aria-describedby={
+          errors.length > 0 ? 'markdown-help markdown-errors' : 'markdown-help'
+        }
         onChange={(event) => onChange(event.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         spellCheck
       />
+
+      <p id="markdown-help" className="markdown-editor__help">
+        {COPY.markdownHelp}
+      </p>
 
       <div id="markdown-errors" aria-live="polite">
         {errors.length > 0 && (
@@ -75,8 +81,8 @@ export const MarkdownEditor = ({ value, errors, onChange }: MarkdownEditorProps)
               <strong>{COPY.markdownInvalid}</strong>
               <ul>
                 {errors.map((error) => (
-                  <li key={`${error.line}-${error.message}`}>
-                    Line {error.line}: {error.message}
+                  <li key={`${error.line}-${error.code}`}>
+                    {COPY.markdownErrorLine(error.line, error.code)}
                   </li>
                 ))}
               </ul>
