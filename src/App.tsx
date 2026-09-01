@@ -1,10 +1,11 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useRef, useState, useEffect, type FocusEvent } from 'react'
 import './styles/app.css'
 import { COPY } from './copy'
 import { MarkdownEditor } from './components/MarkdownEditor'
 import { Icon } from './components/Icon'
 import { PrintPreview, type LayoutStatus } from './components/PrintPreview'
 import { VisualEditor } from './components/VisualEditor'
+import { listCardId } from './components/elementIds'
 import { parseMarkdown, serializeMarkdown } from './domain/markdown'
 import type { MarkdownError, TodoDocument } from './domain/types'
 import { usePersistentDocument } from './hooks/usePersistentDocument'
@@ -15,6 +16,21 @@ type EditorMode = 'visual' | 'markdown'
 // layout stay in an adjacent hint the button points at, so the accessible name
 // remains short while the guidance is still announced with the control.
 const PRINT_HINT_ID = 'print-dialog-hint'
+
+// Below the stacking breakpoint the editor and the preview are several viewport
+// heights apart, so both regions are addressable targets the navigation moves
+// focus between.
+const EDITOR_REGION_ID = 'editor-region'
+const PREVIEW_REGION_ID = 'preview-region'
+
+// jsdom, and any environment without a layout engine, leaves scrollIntoView
+// undefined; focus() already scrolls, so the explicit call only refines where
+// the target lands.
+const revealElement = (element: HTMLElement | null) => {
+  if (!element) return
+  element.focus()
+  element.scrollIntoView?.({ block: 'start' })
+}
 
 const INITIAL_LAYOUT_STATUS: LayoutStatus = {
   ready: false,
@@ -29,6 +45,9 @@ const App = () => {
   const [markdown, setMarkdown] = useState(() => serializeMarkdown(document))
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
   const [layoutStatus, setLayoutStatus] = useState(INITIAL_LAYOUT_STATUS)
+  // Returning from the preview lands on the control the user last edited rather
+  // than on the top of a document that can be several screens tall.
+  const lastEditedElement = useRef<HTMLElement | null>(null)
 
   const applyDocument = useCallback((nextDocument: TodoDocument) => {
     setDocument(nextDocument)
@@ -68,6 +87,28 @@ const App = () => {
       ? COPY.print
       : COPY.printBlocked
 
+  const firstOverflowListId = layoutStatus.overflowListIds[0]
+
+  // The card carries the list name and the local correction as its description,
+  // so moving focus there announces both without a second live region.
+  const goToOverflowList = () => {
+    if (!firstOverflowListId) return
+    revealElement(window.document.getElementById(listCardId(firstOverflowListId)))
+  }
+
+  const rememberEditedElement = (event: FocusEvent<HTMLDivElement>) => {
+    lastEditedElement.current = event.target
+  }
+
+  const goToPreview = () => revealElement(window.document.getElementById(PREVIEW_REGION_ID))
+
+  const backToEditor = () => {
+    const remembered = lastEditedElement.current
+    revealElement(
+      remembered?.isConnected ? remembered : window.document.getElementById(EDITOR_REGION_ID),
+    )
+  }
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -94,7 +135,12 @@ const App = () => {
   return (
     <div className={`app-shell${canPrint ? '' : ' app-shell--print-blocked'}`}>
       <main className="workspace">
-        <section className="editor-pane screen-only" aria-label={COPY.editorRegion}>
+        <section
+          className="editor-pane screen-only"
+          id={EDITOR_REGION_ID}
+          tabIndex={-1}
+          aria-label={COPY.editorRegion}
+        >
           <header className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
             <div className="toolbar-group">
               <label className="toggle-control">
@@ -175,13 +221,28 @@ const App = () => {
                 {printLabel}
               </button>
 
+              {firstOverflowListId && mode === 'visual' && (
+                <button className="secondary-button" type="button" onClick={goToOverflowList}>
+                  <Icon name="warning" size={16} />
+                  {COPY.goToOverflowList}
+                </button>
+              )}
+
+              {/* Side by side the preview is already on screen; stacked, it sits
+                  a whole editor below, so this jump is revealed by the same
+                  media query that stacks the panes. */}
+              <button className="secondary-button narrow-only" type="button" onClick={goToPreview}>
+                <Icon name="panel" size={16} />
+                {COPY.goToPreview}
+              </button>
+
               <p className="print-dialog-hint" id={PRINT_HINT_ID}>
                 {COPY.printDialogHint}
               </p>
             </div>
           </header>
 
-          <div className="editor-scroll-region">
+          <div className="editor-scroll-region" onFocusCapture={rememberEditedElement}>
             {mode === 'visual' ? (
               <VisualEditor
                 document={document}
@@ -198,7 +259,20 @@ const App = () => {
           </div>
         </section>
 
-        <section className="preview-pane" aria-label={COPY.previewRegion}>
+        <section
+          className="preview-pane"
+          id={PREVIEW_REGION_ID}
+          tabIndex={-1}
+          aria-label={COPY.previewRegion}
+        >
+          <button
+            className="secondary-button narrow-only screen-only preview-pane__return"
+            type="button"
+            onClick={backToEditor}
+          >
+            <Icon name="arrow-up" size={16} />
+            {COPY.backToEditor}
+          </button>
 
           {layoutStatus.overflowListIds.length > 0 && (
             <div className="overflow-banner screen-only" role="alert">

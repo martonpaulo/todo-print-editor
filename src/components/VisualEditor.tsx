@@ -3,6 +3,7 @@ import { COPY } from '../copy'
 import { createList, createPanelBreak, createTodoItem } from '../domain/document'
 import type { ListBlock, TodoDocument, TodoItem } from '../domain/types'
 import { Icon } from './Icon'
+import { listCardId, listOverflowNoteId } from './elementIds'
 
 interface VisualEditorProps {
   document: TodoDocument
@@ -118,7 +119,13 @@ export const VisualEditor = ({
             <section
               className={`list-card${isOverflowing ? ' list-card--overflow' : ''}`}
               key={block.id}
+              id={listCardId(block.id)}
               aria-label={listContext}
+              // An overflowing card is the target the blocked print action sends
+              // the user to, so it must accept programmatic focus and announce
+              // the local correction as its description.
+              tabIndex={isOverflowing ? -1 : undefined}
+              aria-describedby={isOverflowing ? listOverflowNoteId(block.id) : undefined}
             >
               <header className="list-card__header">
                 <span className="eyebrow">{COPY.listNumber(currentListNumber, listNumbers.size)}</span>
@@ -154,6 +161,13 @@ export const VisualEditor = ({
                   </button>
                 </div>
               </header>
+
+              {isOverflowing && (
+                <p className="list-card__overflow-note" id={listOverflowNoteId(block.id)}>
+                  <Icon name="warning" size={16} />
+                  {COPY.listOverflow}
+                </p>
+              )}
 
               <label className="sr-only" htmlFor={`title-${block.id}`}>
                 {COPY.listTitleLabel(listContext)}

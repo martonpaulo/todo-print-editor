@@ -1,7 +1,19 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { COPY } from './copy'
+
+// jsdom reports every box as zero, so the layout never finishes measuring and the
+// print action would keep its preparing label. Measured lists taller than a panel
+// put the document in its blocked state; shorter ones make it printable.
+const stubLayout = ({ listHeight, panelHeight }: { listHeight: number; panelHeight: number }) => {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const measured =
+      this instanceof HTMLElement && this.dataset.measureList !== undefined ? listHeight : panelHeight
+    return { ...new DOMRect(), height: measured, width: measured } as DOMRect
+  })
+}
 
 describe('App', () => {
   // The test environment does not implement matchMedia, which PrintPreview
@@ -28,15 +40,7 @@ describe('App', () => {
   })
 
   it('describes the print action with the print-dialog guidance', async () => {
-    // jsdom reports every box as zero, so the layout never finishes measuring and
-    // the action would keep its preparing label. Panels large enough for every
-    // list put the action in its printable state, where the label is visible.
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: Element,
-    ) {
-      const height = this instanceof HTMLElement && this.dataset.measureList !== undefined ? 100 : 900
-      return { ...new DOMRect(), height, width: height } as DOMRect
-    })
+    stubLayout({ listHeight: 100, panelHeight: 900 })
 
     render(<App />)
 
@@ -90,4 +94,66 @@ describe('App', () => {
       COPY.starter.personal,
     ])
   })
+
+  it('leads from the blocked print action to the first oversized list', async () => {
+    const user = userEvent.setup()
+    // Every list is taller than a panel, so printing is blocked and the first
+    // list is the recovery target.
+    stubLayout({ listHeight: 2000, panelHeight: 900 })
+
+    render(<App />)
+
+    const blockedPrint = await screen.findByRole('button', { name: COPY.printBlocked })
+    expect(blockedPrint).toBeDisabled()
+
+    // The recovery path is a labelled control beside the blocked action, not the
+    // dashed border or the banner several screens below.
+    await user.click(screen.getByRole('button', { name: COPY.goToOverflowList }))
+
+    const firstList = screen.getByRole('region', { name: `List 1: ${COPY.starter.priorities}` })
+    // Focus lands on the affected list, which announces its own name and the
+    // correction that applies to it.
+    expect(firstList).toHaveFocus()
+    expect(firstList).toHaveAccessibleDescription(COPY.listOverflow)
+  })
+
+  it('offers no jump while every list fits', async () => {
+    stubLayout({ listHeight: 100, panelHeight: 900 })
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: COPY.print })
+    expect(screen.queryByRole('button', { name: COPY.goToOverflowList })).not.toBeInTheDocument()
+  })
+
+  it('moves to the preview and back to the last edited control', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const title = screen.getByRole('textbox', { name: `Title of List 2: ${COPY.starter.smallWins}` })
+    await user.click(title)
+
+    await user.click(screen.getByRole('button', { name: COPY.goToPreview }))
+    expect(screen.getByRole('region', { name: COPY.previewRegion })).toHaveFocus()
+
+    // Returning lands on the control the user left, not on the top of a document
+    // that is several screens tall once the panes are stacked.
+    await user.click(screen.getByRole('button', { name: COPY.backToEditor }))
+    expect(title).toHaveFocus()
+  })
+
+  it('marks the stacked-layout navigation as revealed only at the breakpoint', () => {
+    render(<App />)
+
+    // The breakpoint itself stays in CSS: both controls carry the class that is
+    // hidden by default and revealed inside the block stacking the panes, so the
+    // side-by-side layout is untouched.
+    expect(screen.getByRole('button', { name: COPY.goToPreview })).toHaveClass('narrow-only')
+
+    const back = screen.getByRole('button', { name: COPY.backToEditor })
+    expect(back).toHaveClass('narrow-only')
+    // It lives in the preview pane, so it also has to stay out of print output.
+    expect(back).toHaveClass('screen-only')
+  })
+
 })

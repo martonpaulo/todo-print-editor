@@ -51,6 +51,13 @@ export const COPY = {
   markdownInvalid: 'Previewing the last valid version',
   overflowTitle: 'One list is too tall for a panel.',
   overflowDescription: 'Shorten the highlighted list before printing. Lists are never split.',
+  // The banner explains the document as a whole; this sentence repeats the same
+  // rule beside the list it applies to, so recovery never depends on the dashed
+  // border, on color, or on reaching the preview.
+  listOverflow: 'This list is too tall for one panel. Shorten it before printing.',
+  goToOverflowList: 'Go to the oversized list',
+  goToPreview: 'View print preview',
+  backToEditor: 'Back to the editor',
   emptyPanel: 'Empty panel',
   panel: 'Panel',
   list: 'List',
