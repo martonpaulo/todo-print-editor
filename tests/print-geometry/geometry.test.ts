@@ -18,6 +18,15 @@ const MM_PER_INCH = 25.4
 /** Float slack for a measured millimetre, not a permitted geometric deviation. */
 const EPSILON_MM = 0.05
 
+/**
+ * The `min-height` `src/styles/print.css` declares for a panel under `@media print`, pinned to the
+ * exact figure recorded on #34. Not a tolerance and not a second contract: the recorded contract
+ * says 210mm, this says what the stylesheet currently does instead, and the gap between them is the
+ * open question #34 owns. Pinned rather than parsed-and-trusted so the declaration cannot move
+ * without a test failing. Delete it when #34 lands.
+ */
+const FLOOR_RECORDED_ON_34_MM = 209
+
 const pxToMm = (px: number): number => (px * MM_PER_INCH) / PX_PER_INCH
 const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_PER_INCH
 
@@ -257,8 +266,15 @@ describe('printed page geometry', () => {
     })
     // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
     // comparison would fail on the rounding rather than on the geometry.
-    paper.forEach((sheet) => {
+    //
+    // Every sheet's paper is pinned positively, including the partial ones the contract does not
+    // sanction: its width must be its slot count times the recorded panel width. That number comes
+    // from `AGENTS.md`, so this rejects any drift in a partial sheet's paper — a one-panel sheet
+    // printing 50mm instead of 99mm fails here — while the separate question of whether a partial
+    // sheet may exist at all stays with #2 below.
+    paper.forEach((sheet, index) => {
       expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
+      expect(sheet.widthMm).toBeCloseTo(sheets[index].panels.length * contract.panelWidthMm, 0)
     })
   })
 
@@ -270,10 +286,18 @@ describe('printed page geometry', () => {
     expect(paper[0].heightMm).toBeCloseTo(contract.pageHeightMm, 0)
   })
 
-  it('declares a print-media panel clamp that cannot exceed the recorded panel', () => {
+  it('declares the print-media panel clamp #34 recorded, and no other', () => {
     // The ceiling is contract-owned: whatever the stylesheet declares, it may not let a panel grow
-    // past the paper. The floor is the stylesheet's own, asserted against the contract below.
+    // past the paper.
     expect(clamp.maxHeightMm).toBe(contract.panelHeightMm)
+
+    // The floor is pinned to the exact value #34 documents. This is not a permitted band — nothing
+    // here tolerates a range. It is a lock: the floor disagrees with the contract by 1mm today, and
+    // any movement in either direction fails, so the stylesheet cannot drift while the rendered box
+    // is checked against it. Deriving the accepted floor from the same declaration would be
+    // circular, passing for a panel collapsed to 1mm. When #34 lands, this value and the `fails`
+    // test below collapse into one contract assertion.
+    expect(clamp.minHeightMm).toBe(FLOOR_RECORDED_ON_34_MM)
     expect(clamp.minHeightMm).toBeLessThanOrEqual(clamp.maxHeightMm)
   })
 
@@ -283,15 +307,14 @@ describe('printed page geometry', () => {
     expect(printMediaSheets[0].panels).toHaveLength(contract.panelsPerPage)
     expect(printMediaSheets[0].widthMm).toBeCloseTo(contract.pageWidthMm, 1)
 
-    // Height is checked against the clamp parsed out of print.css, not a band written here: a
-    // tolerance owned by this file would be a second statement of a physical dimension, free to
-    // drift from the stylesheet. Rendering must honour what the stylesheet declares; whether the
-    // declared floor may sit below the contract at all is #34's question, asserted below.
+    // The rendered box must equal what the stylesheet declares, and the declaration itself is
+    // pinned above, so together these reject both a rendering regression and a silent edit to the
+    // clamp. Whether the declared floor may sit below the contract at all is #34's question.
     printMediaSheets[0].panels.forEach((panel) => {
-      expect(panel.heightMm).toBeGreaterThanOrEqual(clamp.minHeightMm - EPSILON_MM)
+      expect(panel.heightMm).toBeCloseTo(clamp.minHeightMm, 1)
       expect(panel.heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
     })
-    expect(printMediaSheets[0].heightMm).toBeGreaterThanOrEqual(clamp.minHeightMm - EPSILON_MM)
+    expect(printMediaSheets[0].heightMm).toBeCloseTo(clamp.minHeightMm, 1)
     expect(printMediaSheets[0].heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
   })
 
