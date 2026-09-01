@@ -133,6 +133,20 @@ describe('MarkdownEditor', () => {
     ).toBeInTheDocument()
   })
 
+  it('announces an unsupported heading with its centralized line-specific message', () => {
+    render(
+      <MarkdownEditor
+        value={'### Personal\n- [ ] Call someone'}
+        errors={[{ line: 1, code: 'unsupported-heading' }]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(COPY.markdownErrorLine(1, 'unsupported-heading')),
+    ).toBeInTheDocument()
+  })
+
   it('keeps the static help outside the live region so edits announce errors only', () => {
     const { rerender } = render(
       <MarkdownEditor value="" errors={[]} onChange={vi.fn()} />,
