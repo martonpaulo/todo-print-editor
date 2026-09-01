@@ -18,9 +18,39 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      deploy_needed: ${{ steps.changed.outputs.deploy_needed }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Does this push change anything the build reads? The set below is derived from the build,
+      # not from file extensions: vite.config.ts and tsconfig.app.json resolve the application from
+      # index.html, src/ and public/; the package files fix its dependencies; the tsconfig and
+      # vite files shape the output; this workflow decides how it is built. AGENTS.md, README.md,
+      # docs/, .ao/, .gemini/ and the conventions workflow are outside it because nothing in
+      # `tsc -b && vite build` reads them. This gates the deploy job only — never the trigger —
+      # because `validate` is a required status check and must report on every push and pull
+      # request. An unknowable changed set (first push, force-push, workflow_dispatch) deploys.
+      - name: Decide whether the deploy is needed
+        id: changed
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -u
+          needed=true
+          if [ "$EVENT" = push ] && [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -Eq '^0+$' \
+             && git fetch --quiet --depth=1 origin "$BEFORE" 2>/dev/null; then
+            changed=$(git diff --name-only "$BEFORE" "$AFTER")
+            if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -Eq \
+                '^(index\.html|src/|public/|package\.json|package-lock\.json|vite\.config\.ts|tsconfig(\.app|\.node)?\.json|\.github/workflows/deploy\.yml)'; then
+              needed=false
+            fi
+            printf 'changed files:\n%s\n' "$changed"
+          fi
+          echo "deploy_needed=$needed" >> "$GITHUB_OUTPUT"
+          echo "deploy needed: $needed"
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -35,16 +65,16 @@ jobs:
       - name: Build
         run: npm run build
       - name: Configure Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.changed.outputs.deploy_needed == 'true'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
       - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.changed.outputs.deploy_needed == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: ./dist
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.deploy_needed == 'true'
     needs: validate
     runs-on: ubuntu-latest
     environment:
