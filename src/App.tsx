@@ -11,6 +11,11 @@ import { usePersistentDocument } from './hooks/usePersistentDocument'
 
 type EditorMode = 'visual' | 'markdown'
 
+// The print action names only the format; the dialog settings that preserve the
+// layout stay in an adjacent hint the button points at, so the accessible name
+// remains short while the guidance is still announced with the control.
+const PRINT_HINT_ID = 'print-dialog-hint'
+
 const INITIAL_LAYOUT_STATUS: LayoutStatus = {
   ready: false,
   overflowListIds: [],
@@ -162,12 +167,17 @@ const App = () => {
               <button
                 className="primary-button"
                 type="button"
+                aria-describedby={PRINT_HINT_ID}
                 disabled={!canPrint}
                 onClick={() => window.print()}
               >
                 <Icon name="printer" />
                 {printLabel}
               </button>
+
+              <p className="print-dialog-hint" id={PRINT_HINT_ID}>
+                {COPY.printDialogHint}
+              </p>
             </div>
           </header>
 

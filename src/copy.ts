@@ -21,7 +21,9 @@ export const COPY = {
   firstPanelDate: 'Date on first panel',
   chooseDate: 'Choose document date',
   panelNumbers: 'Panel numbers',
-  print: 'Print',
+  print: 'Print A4',
+  printDialogHint:
+    'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. Printers without edge-to-edge support may still add a margin.',
   preparingPrint: 'Preparing layout…',
   printBlocked: 'Resolve issues to print',
   printBlockedTitle: 'Printing is blocked',
