@@ -30,6 +30,7 @@ export type MarkdownErrorCode =
   | 'duplicate-date'
   | 'invalid-date'
   | 'task-without-list'
+  | 'unsupported-heading'
   | 'unrecognized-line'
 
 export interface MarkdownError {

@@ -4,6 +4,10 @@ import type { MarkdownError, MarkdownParseResult, TodoDocument } from './types'
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const CHECKLIST_PATTERN = /^[-*]\s*\[([ xX])\]\s*(.*)$/
 const BULLET_PATTERN = /^[-*]\s+(.*)$/
+// The only supported list heading is exactly two hashes, optionally followed by a
+// separator and a title. Bare `##` stays valid because an empty list title
+// serializes to `## ` and `continueMarkdownAtSelection` inserts the same prefix.
+const LIST_HEADING_PATTERN = /^##(?:[ \t]+(.*))?$/
 
 export interface MarkdownDraftItem {
   text: string
@@ -77,9 +81,15 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
     }
 
     if (line.startsWith('##')) {
+      const headingMatch = line.match(LIST_HEADING_PATTERN)
+      if (!headingMatch) {
+        errors.push({ line: lineNumber, code: 'unsupported-heading' })
+        return
+      }
+
       currentList = {
         kind: 'list',
-        title: line.replace(/^##\s*/, ''),
+        title: headingMatch[1] ?? '',
         items: [],
       }
       draft.blocks.push(currentList)

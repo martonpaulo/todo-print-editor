@@ -4,6 +4,7 @@ const MARKDOWN_ERROR_MESSAGES = {
   'duplicate-date': 'Use only one document date.',
   'invalid-date': 'Use an ISO date such as “# 2026-08-24”.',
   'task-without-list': 'Add a “## List title” before its tasks.',
+  'unsupported-heading': 'Use exactly two hashes and a space, as in “## List title”.',
   'unrecognized-line': 'Use checklist items such as “- [ ] Task”.',
 } satisfies Record<MarkdownErrorCode, string>
 
