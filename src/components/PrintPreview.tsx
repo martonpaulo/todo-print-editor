@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { COPY } from '../copy'
 import { paginateBlocks } from '../domain/pagination'
 import { recordProfileSample } from '../profiling'
@@ -44,7 +44,14 @@ const formatDate = (isoDate: string): string => {
   }).format(date)
 }
 
-const PrintList = (({ list, overflowing = false }: { list: ListBlock; overflowing?: boolean }) => (
+/**
+ * Memoized because every list is rendered twice — once in the hidden
+ * measurement layer and once in its panel — and an edit changes exactly one
+ * list object. Without the bail-out React rewrites the whole print DOM on each
+ * keystroke, which invalidates layout for every list and dominates the measured
+ * editing cost (see docs/performance.md).
+ */
+const PrintList = memo(({ list, overflowing = false }: { list: ListBlock; overflowing?: boolean }) => (
   <section className={`print-list${overflowing ? ' print-list--overflow' : ''}`}>
     <h2 className="print-list__title">{list.title || COPY.untitledList}</h2>
     <div className="print-list__rule" />
@@ -65,6 +72,7 @@ const PrintList = (({ list, overflowing = false }: { list: ListBlock; overflowin
     </div>
   </section>
 ))
+PrintList.displayName = 'PrintList'
 
 interface PanelHeaderProps {
   document: TodoDocument
