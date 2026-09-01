@@ -10,11 +10,9 @@ the canonical owner of the performance budget; issue #5 established it.
 full editing responsiveness.**
 
 The number is measured, not chosen. At 25 lists every profiled interaction paints
-within one frame of the edit. At 50 lists typing, reordering, and settings changes
-all miss frames, and at 100 lists and above every interaction misses several.
-
-Before the memoization in this change the same threshold sat at 10 lists: at 25
-lists a keystroke took 22.6 ms to paint and a reorder 44.1 ms.
+within one frame of the edit and every other budget below holds. At 50 lists four
+of five interactions miss frames, and at 100 lists and above every one of them
+does.
 
 Nothing enforces the limit, and nothing should without a separate product
 decision: larger documents keep working and stay correct, they simply feel
@@ -23,15 +21,17 @@ unaffected by scale.
 
 ## Budget
 
-| Metric | Budget | Reported as |
-| --- | --- | --- |
-| Edit-to-paint (p95) | ≤ one frame — 20 ms at 60 Hz | `editToPaintP95` |
-| React commit per edit (p95) | ≤ one frame at the supported maximum | `reactCommitP95` |
-| Print measurement pass (p95) | < 4 ms — **not met, see below** | `printMeasurementP95` |
-| Persistence per edit (p95) | < 1 ms at the supported maximum | `persistenceP95` |
-| Edit to last commit (p95) | end-to-end upper bound, no budget | `editToLastCommitP95` |
-| React render per edit (p95) | diagnostic, no budget | `reactRenderP95` |
-| Handler return (p95) | diagnostic, no budget | `handlerReturnP95` |
+Every budget below is met at the supported maximum.
+
+| Metric | Budget | At 25 lists | Reported as |
+| --- | --- | --- | --- |
+| Edit-to-paint (p95) | ≤ one frame — 20 ms at 60 Hz | 16.9–19.0 ms | `editToPaintP95` |
+| React commit per edit (p95) | ≤ one frame | 2.9–6.4 ms | `reactCommitP95` |
+| Print measurement pass (p95) | < 4 ms | 1.5–3.8 ms | `printMeasurementP95` |
+| Persistence per edit (p95) | < 1 ms | 0.1–0.2 ms | `persistenceP95` |
+| Edit to last commit (p95) | end-to-end upper bound, no budget | 9.1–17.3 ms | `editToLastCommitP95` |
+| React render per edit (p95) | diagnostic, no budget | 1.8–4.1 ms | `reactRenderP95` |
+| Handler return (p95) | diagnostic, no budget | 0.4–10.2 ms | `handlerReturnP95` |
 
 ### What each metric measures, and which ones decide anything
 
@@ -64,125 +64,111 @@ escapes accounting, and no budget is read from it.
 **`handlerReturn` measures only how long the event handler blocked.** React
 commits a click-driven update after the handler returns, so the figure is
 interaction-dependent and misleading across interactions: reordering returns in
-0.4 ms while committing for 9.4 ms. It is a diagnostic for how much of an
+0.4 ms while committing for 6.4 ms. It is a diagnostic for how much of an
 interaction is synchronous within the handler, and no budget reads it.
 
 Note that `printMeasurement` can exceed `reactCommit` at large scales: the
 measurement pass also runs from `ResizeObserver`, outside any React commit.
 
-**The 4 ms print-measurement budget is not met at the supported maximum** — the
-pass costs up to 8.8 ms p95 there. It is left as a recorded limit because the
-budgets that matter, painting within one frame and committing within one frame,
-both hold at every interaction. Bringing the pass under 4 ms needs a per-list
-height cache keyed by list content, which must preserve the print-layout contract
-owned by issue #2.
-
 ## Recorded results
 
 Median of three runs (two at 500 lists), 25 measured iterations per interaction
-after 5 warm-up iterations, headless Chromium 152 at a 1600×1000 viewport,
-production build, before → after the memoized print list.
+after 5 warm-up iterations, Puppeteer's headless Chrome 152 at a 1600×1000
+viewport, production build, before → after the memoized print list.
 
 Edit-to-paint, p95 milliseconds — the budget metric. One frame is ~20 ms here:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 18.6 → 18.8 | 22.6 → **20.2** | 70.7 → 32.2 | 142 → 68.5 | 709 → 559 |
-| Task checking | 17.9 → 17.4 | 18.4 → **17.5** | 41.2 → 20.5 | 86.5 → 41.5 | 427 → 214 |
-| Reordering | 18.2 → 17.9 | 44.1 → **19.1** | 70.2 → 37.1 | 139 → 67.5 | 854 → 528 |
-| Document settings | 15.6 → 16.0 | 36.9 → **15.8** | 61.9 → 34.8 | 142 → 56.9 | 1010 → 455 |
-| Markdown typing | 17.9 → 17.8 | 18.7 → **18.2** | 34.6 → 19.3 | 73.3 → 26.8 | 506 → 440 |
-
-Every interaction at 25 lists paints within one frame after the change and three
-of five did not before it, which is what moves the supported maximum from 10
-lists to 25. At 50 lists three of five are outside a frame again. Visual typing at
-25 lists sits on the boundary — 20.2 ms here and 19.8 ms in an independent run —
-so treat 25 lists as the edge of the supported range rather than comfortably
-inside it.
+| Visual typing | 18.2 → 18.7 | 18.9 → **18.8** | 26.7 → 24.4 | 46.6 → 38.8 | 249 → 292 |
+| Task checking | 18.0 → 17.9 | 19.2 → **18.3** | 23.5 → 19.0 | 43.4 → 37.1 | 238 → 179 |
+| Reordering | 18.0 → 18.0 | 18.6 → **19.0** | 28.0 → 26.0 | 56.4 → 44.9 | 306 → 345 |
+| Document settings | 17.1 → 17.2 | 17.1 → **16.9** | 27.6 → 21.5 | 49.2 → 40.3 | 319 → 216 |
+| Markdown typing | 18.1 → 18.3 | 18.3 → **18.4** | 18.9 → 18.5 | 26.9 → 20.3 | 121 → 99.7 |
 
 React commit per edit, p95 milliseconds — mutation plus layout effects:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 3.8 → 4.1 | 9.1 → **8.2** | 29.5 → 14.3 | 74.6 → 35.8 | 319 → 269 |
-| Task checking | 2.8 → 2.2 | 6.5 → **5.1** | 16.8 → 8.0 | 32.3 → 17.8 | 145 → 62.2 |
-| Reordering | 4.9 → 5.2 | 21.2 → **9.4** | 33.4 → 19.5 | 71.3 → 31.2 | 389 → 298 |
-| Document settings | 4.3 → 3.1 | 15.9 → **7.4** | 28.8 → 18.7 | 60.1 → 28.4 | 470 → 206 |
-| Markdown typing | 2.6 → 2.4 | 4.7 → **3.6** | 11.9 → 5.7 | 22.8 → 9.7 | 288 → 203 |
+| Visual typing | 2.2 → 2.5 | 5.5 → **4.2** | 9.9 → 8.8 | 17.2 → 14.9 | 106 → 103 |
+| Task checking | 3.1 → 3.0 | 6.2 → **4.2** | 7.7 → 7.2 | 16.6 → 14.1 | 98.4 → 81.7 |
+| Reordering | 4.6 → 4.3 | 7.6 → **6.4** | 10.6 → 10.5 | 22.0 → 18.8 | 125 → 131 |
+| Document settings | 2.8 → 2.7 | 4.9 → **4.0** | 9.4 → 8.5 | 17.4 → 15.7 | 122 → 97.1 |
+| Markdown typing | 2.4 → 2.4 | 3.3 → **2.9** | 4.3 → 4.0 | 8.8 → 7.2 | 42.2 → 35.7 |
 
 React render per edit, p95 milliseconds — render phase only:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 2.5 → 2.4 | 5.4 → 3.9 | 15.0 → 6.7 | 41.7 → 15.8 | 176 → 120 |
-| Task checking | 2.8 → 2.1 | 5.2 → 3.4 | 12.6 → 5.3 | 37.3 → 16.3 | 156 → 77.5 |
-| Reordering | 2.4 → 1.7 | 8.6 → 3.0 | 14.7 → 6.2 | 33.8 → 10.5 | 213 → 79.9 |
-| Document settings | 2.5 → 1.9 | 8.5 → 2.9 | 13.7 → 7.0 | 55.0 → 10.9 | 288 → 129 |
-| Markdown typing | 1.7 → 1.4 | 2.7 → 1.6 | 6.5 → 2.3 | 18.4 → 4.0 | 71.0 → 41.4 |
+| Visual typing | 2.5 → 2.3 | 5.4 → 4.1 | 8.1 → 7.1 | 17.1 → 12.0 | 77.5 → 83.5 |
+| Task checking | 3.4 → 2.6 | 5.7 → 3.8 | 7.3 → 5.5 | 16.5 → 13.8 | 83.8 → 57.4 |
+| Reordering | 2.3 → 1.9 | 4.5 → 3.4 | 7.0 → 5.8 | 16.8 → 12.5 | 81.1 → 93.0 |
+| Document settings | 2.7 → 2.2 | 5.4 → 3.7 | 8.5 → 6.2 | 18.8 → 13.1 | 113 → 73.5 |
+| Markdown typing | 1.8 → 1.4 | 2.2 → 1.8 | 3.2 → 2.3 | 6.0 → 3.7 | 35.7 → 16.4 |
 
-Edit to last commit, p95 milliseconds — end-to-end upper bound:
-
-| Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
-| --- | --- | --- | --- | --- | --- |
-| Visual typing | 10.3 → 8.4 | 22.7 → 20.3 | 71.0 → 32.3 | 161 → 70.5 | 725 → 608 |
-| Task checking | 7.1 → 5.8 | 15.6 → 12.3 | 45.0 → 20.5 | 99.6 → 42.8 | 436 → 225 |
-| Reordering | 8.9 → 9.0 | 46.8 → 18.1 | 78.5 → 38.9 | 148 → 70.5 | 891 → 557 |
-| Document settings | 15.7 → 16.1 | 39.1 → 15.9 | 70.0 → 34.9 | 157 → 59.5 | 1286 → 627 |
-| Markdown typing | 7.7 → 7.8 | 12.6 → 9.4 | 34.7 → 15.9 | 73.5 → 26.8 | 509 → 464 |
-
-Print measurement pass, p95 milliseconds, 3 passes per edit and 4 for reordering:
+Print measurement pass, p95 milliseconds. The count is 3 passes per edit and 4
+for reordering, unchanged by the memoization at every scale:
 
 | Interaction | 10 lists | 25 lists | 50 lists | 100 lists | 500 lists |
 | --- | --- | --- | --- | --- | --- |
-| Visual typing | 2.5 → 2.7 | 8.2 → 7.5 | 24.5 → 12.9 | 48.8 → 32.8 | 218 → 191 |
-| Task checking | 1.0 → 1.1 | 4.7 → 4.8 | 11.2 → 7.0 | 12.8 → 13.9 | 35.7 → 10.5 |
-| Reordering | 3.8 → 4.9 | 17.7 → 8.8 | 30.0 → 18.0 | 63.6 → 28.6 | 299 → 216 |
-| Document settings | 2.5 → 2.2 | 10.3 → 5.5 | 18.5 → 13.6 | 39.2 → 20.6 | 306 → 142 |
-| Markdown typing | 2.9 → 2.8 | 5.2 → 4.0 | 12.9 → 6.9 | 24.8 → 12.3 | 330 → 255 |
+| Visual typing | 1.0 → 1.1 | 1.6 → 1.5 | 2.4 → 3.0 | 5.0 → 4.7 | 45.7 → 51.2 |
+| Task checking | 1.3 → 1.4 | 2.1 → 1.7 | 2.1 → 2.5 | 3.7 → 4.3 | 32.7 → 31.6 |
+| Reordering | 3.1 → 3.0 | 4.2 → 3.8 | 4.9 → 5.5 | 8.7 → 9.3 | 55.3 → 75.1 |
+| Document settings | 1.1 → 1.2 | 1.6 → 1.6 | 2.5 → 2.7 | 4.9 → 5.0 | 41.0 → 41.9 |
+| Markdown typing | 1.9 → 2.1 | 2.5 → 2.5 | 3.4 → 3.3 | 6.0 → 5.9 | 27.7 → 27.5 |
 
-The pass still walks every list on every edit; the memoization only makes the
-layout it forces cheaper. That is exactly the limit the 4 ms budget records.
+The pass fits its 4 ms budget at the supported maximum and first exceeds it at
+50 lists on reordering. It walks every list on every edit, so it grows linearly;
+the memoization does not change that, only the layout each pass forces.
 
 Persistence never approached its budget: JSON serialization plus the synchronous
 `localStorage` write measured 0.1–0.2 ms up to 50 lists, 0.3–0.5 ms at 100 lists,
-and 1.4–3.6 ms even at 500 lists. No persistence change is justified by this
-profile, which also leaves the durability contract owned by issue #1 untouched.
+and 1.1–3.7 ms even at 500 lists.
 
-Initial mount to a ready preview, before → after: 137 → 115 ms at 10 lists,
-157 → 146 ms at 25, 349 → 190 ms at 50, 535 → 339 ms at 100, and
-2,245 → 1,102 ms at 500.
+Initial mount to a ready preview, before → after: 130 → 120 ms at 10 lists,
+161 → 177 ms at 25, 232 → 309 ms at 50, 434 → 382 ms at 100, and
+1,385 → 1,452 ms at 500.
 
 ### How much to trust these numbers
 
-The two variants ran back-to-back on a machine shared with other work, the
-memoized one first, so contention is a confound. Three things bound it:
+Absolute figures are machine-specific and move sharply with system load. The
+threshold and the growth curve are what transfer; a single figure is not evidence.
 
-- The 10-list column is a control: the memoization has little to do there, and
-  before and after agree within 0.4 ms on every interaction.
-- An independent earlier run of the same comparison reached the same threshold —
-  25 lists inside a frame after, three of five outside it before — with different
-  absolute numbers.
-- Re-running the memoized variant alone at 25 lists under a system load average
-  of 5–6.6 still painted every interaction within a frame (14.7–19.6 ms).
+Two claims recorded during this issue's own work did not survive a cleaner
+measurement, and both are corrected above:
 
-Absolute figures are machine-specific and move with load. The before/after
-comparison, the growth curve, and the threshold are what transfer.
+- An earlier comparison, taken in a different browser while the machine's load
+  average climbed from 2.8 to 10 during the baseline half of the run, showed the
+  unmemoized build missing frames at 25 lists and suggested the memoization moved
+  the supported maximum from 10 lists to 25. Repeated on Chrome at steady load, it
+  does not reproduce: both builds paint within a frame at 25 lists, and the
+  memoization improves commit and render duration by roughly 10–25% there without
+  changing the supported scale.
+- The same contaminated run put the print measurement pass at 8.8 ms p95 at the
+  supported maximum, and this document recorded it as a budget that could not be
+  met. It measures 1.5–3.8 ms on a quiet machine and meets the 4 ms budget.
+
+When re-running, take both variants back-to-back on an otherwise idle machine and
+check the smallest scale as a control: the memoization has little to do at 10
+lists, so a before/after gap there is contention, not signal.
 
 ## The correction this profile justified
 
 `PrintList` in `src/components/PrintPreview.tsx` is memoized. Every list renders
 twice — once in the hidden measurement layer and once in its panel — and an edit
 replaces exactly one list object, so the bail-out reduces the DOM React rewrites
-per keystroke from the whole document to one list. Commit duration falls by about
-half at and above the supported maximum, and the supported maximum itself moves
-from 10 lists to 25.
+per keystroke from the whole document to one list.
 
-It is a pure rendering change: the same elements are produced from the same
-props, so pagination inputs and print output are unchanged.
+It is a small, consistent improvement rather than a rescue: render and commit
+duration fall by roughly 10–25% between 25 and 100 lists, the effect is inside the
+noise at 10 lists and at 500, and the supported scale is 25 lists with or without
+it. It is kept because it is a pure rendering change — the same elements from the
+same props, so pagination inputs and print output are unchanged — that the profile
+shows reducing measured work at the scales users occupy.
 
 Optimizations the profile did **not** justify, and which are therefore not
 implemented: coalescing or debouncing persistence, a measurement worker, print
-virtualization, and any cache or timer beyond the memo above.
+virtualization, and any cache or timer.
 
 ## Reproducing the profile
 
@@ -204,13 +190,12 @@ npm run profile -- --scales 10,25,50,100 --iterations 25 --warmup 5 --repeats 3
   least 3: a single run on a busy machine varies by more than the effect sizes
   above.
 
-Requirements and moving parts:
+Moving parts:
 
-- A Chromium-family browser. The script looks for Chrome, Chromium, and Brave in
-  their usual locations; set `CHROME_PATH` to point it elsewhere.
-- `scripts/profile.mjs` starts `vite preview`, drives the browser over the
-  DevTools protocol using Node's built-in `WebSocket`, and adds no dependency. A
-  harness that throws aborts the run immediately with the page's own error.
+- `scripts/profile.mjs` serves the harness build and drives it with Puppeteer,
+  the same browser the printed-page geometry check uses, so both browser-driven
+  checks provision and launch Chrome the same way. A harness that throws aborts
+  the run immediately with the page's own error.
 - `vite.profile.config.ts` builds `profile/index.html` into `.profile-dist`,
   separately from `npm run build`, so the deployed application keeps exactly one
   route and never ships harness code. It aliases `react-dom/client` to
