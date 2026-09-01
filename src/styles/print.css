@@ -5,8 +5,8 @@
   height: var(--print-page-height);
   
   overflow: hidden;
-  color: #000000;
-  background: #ffffff;
+  color: var(--print-ink);
+  background: var(--print-paper);
   box-shadow: var(--shadow-page);
   font-family: var(--font-print);
 }
@@ -21,7 +21,7 @@
   min-width: 0;
   padding: var(--print-panel-padding-y) var(--print-panel-padding-x);
   overflow: visible;
-  background: #ffffff;
+  background: var(--print-paper);
 }
 
 .print-page > .print-panel:not(:last-child)::after {
@@ -31,11 +31,11 @@
   width: var(--print-panel-divider);
   height: 100%;
   content: '';
-  background: #000000;
+  background: var(--print-ink);
 }
 
 .print-panel--filler {
-  background: #ffffff;
+  background: var(--print-paper);
 }
 
 .print-panel__header:empty {
@@ -46,7 +46,7 @@
   min-height: var(--print-date-space);
   margin: 0;
   font-size: var(--print-date-size);
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
   letter-spacing: -0.045em;
   line-height: 1;
 }
@@ -56,7 +56,7 @@
   margin: 0;
   font-family: var(--font-mono);
   font-size: var(--print-panel-number-size);
-  font-weight: 700;
+  font-weight: var(--font-weight-strong);
   letter-spacing: 0.08em;
   line-height: 1;
   text-transform: uppercase;
@@ -80,7 +80,7 @@
 }
 
 .print-list--overflow {
-  outline: 0.5mm dashed #000000;
+  outline: 0.5mm dashed var(--print-ink);
   outline-offset: 1mm;
 }
 
@@ -88,15 +88,15 @@
   margin: 0;
   overflow-wrap: anywhere;
   font-size: var(--print-list-title-size);
-  font-weight: 800;
-  letter-spacing: -0.025em;
+  font-weight: var(--font-weight-title);
+  letter-spacing: var(--tracking-tight);
   line-height: 1.12;
 }
 
 .print-list__rule {
   height: 0.3mm;
   margin: 2mm 0 3mm;
-  background: #000000;
+  background: var(--print-ink);
 }
 
 .print-task-grid {
@@ -120,7 +120,7 @@
   width: var(--print-checkbox-size);
   height: var(--print-checkbox-size);
   place-items: center;
-  border: 0.35mm solid #000000;
+  border: 0.35mm solid var(--print-ink);
   font-family: Arial, sans-serif;
   font-size: 7pt;
   font-weight: 900;
@@ -128,8 +128,8 @@
 }
 
 .print-checkbox--checked {
-  color: #ffffff;
-  background: #000000;
+  color: var(--print-paper);
+  background: var(--print-ink);
 }
 
 .print-task__text {
@@ -190,8 +190,8 @@
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
-    color: #000000 !important;
-    background: #ffffff !important;
+    color: var(--print-ink) !important;
+    background: var(--print-paper) !important;
   }
 
   * {
@@ -213,7 +213,7 @@
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
-    background: #ffffff !important;
+    background: var(--print-paper) !important;
   }
 
   .preview-page-shell {
@@ -260,7 +260,7 @@
 
   .print-blocker h1 {
     margin: 0 0 5mm;
-    font: 800 24pt/1 var(--font-print);
+    font: var(--font-weight-title) 24pt/1 var(--font-print);
   }
 
   .print-blocker p {

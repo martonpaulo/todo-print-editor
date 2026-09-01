@@ -3,8 +3,8 @@
 }
 
 html {
-  color: var(--color-ink);
-  background: var(--color-canvas);
+  color: var(--text-primary);
+  background: var(--surface-canvas);
   font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -34,12 +34,12 @@ input:disabled {
 }
 
 ::selection {
-  color: var(--color-paper);
-  background: var(--color-ink);
+  color: var(--action-text);
+  background: var(--action-surface);
 }
 
 :focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
 
