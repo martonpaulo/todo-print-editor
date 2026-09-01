@@ -43,7 +43,7 @@ Treat these values as stable project decisions. Change an established identifier
 ## Established project patterns
 
 - `TodoDocument` in `src/domain/types.ts` is the canonical user-document model. Layout measurements and pagination are derived projections and are never persisted.
-- Keep parsing, validation, and pagination as pure functions under `src/domain/`; React components consume their results without reimplementing those rules.
+- Keep parsing, validation, pagination, and document mutations as pure functions under `src/domain/`; React components consume their results without reimplementing those rules.
 - Keep reusable visible product copy in `src/copy.ts` and reusable design values in `src/styles/tokens.css`.
 - Keep physical paper dimensions in the print token group and make screen preview and `@media print` consume the same tokens.
 - Keep screen editing components under `src/components/`; `App.tsx` owns mode synchronization and document-level settings.
