@@ -90,6 +90,58 @@ describe('Markdown document conversion', () => {
     ])
   })
 
+  it('accepts the documented list heading and a bare heading with an empty title', () => {
+    const result = parseMarkdown('## Title\n\n##', baseDocument)
+
+    expect(result.errors).toEqual([])
+    expect(result.document.blocks).toMatchObject([
+      { kind: 'list', title: 'Title' },
+      { kind: 'list', title: '' },
+    ])
+  })
+
+  it.each([
+    { source: '##Personal', label: 'a missing separator' },
+    { source: '### Personal', label: 'three hashes' },
+    { source: '#### Personal', label: 'four hashes' },
+  ])('rejects a heading with $label instead of reinterpreting it', ({ source }) => {
+    const result = parseMarkdown(source, baseDocument)
+
+    expect(result.errors).toEqual([{ line: 1, code: 'unsupported-heading' }])
+    expect(result.document.blocks).toEqual([])
+  })
+
+  it('reports an unsupported heading before a valid list without dropping the list', () => {
+    const result = parseMarkdown(
+      '### Personal\n\n## Work\n- [ ] Ship the draft',
+      baseDocument,
+    )
+
+    expect(result.errors).toEqual([{ line: 1, code: 'unsupported-heading' }])
+    expect(result.document.blocks).toMatchObject([
+      { kind: 'list', title: 'Work', items: [{ text: 'Ship the draft' }] },
+    ])
+  })
+
+  it('reports an unsupported heading after a valid task and keeps its tasks in the open list', () => {
+    const result = parseMarkdown(
+      '## Work\n- [ ] Ship the draft\n##Personal\n- [x] Call someone',
+      baseDocument,
+    )
+
+    expect(result.errors).toEqual([{ line: 3, code: 'unsupported-heading' }])
+    expect(result.document.blocks).toMatchObject([
+      {
+        kind: 'list',
+        title: 'Work',
+        items: [
+          { text: 'Ship the draft', checked: false },
+          { text: 'Call someone', checked: true },
+        ],
+      },
+    ])
+  })
+
   it('reports malformed checklist syntax instead of treating it as task text', () => {
     const result = parseMarkdown('## List\n* [yes] Ambiguous', baseDocument)
 
