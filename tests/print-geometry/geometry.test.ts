@@ -4,9 +4,10 @@ import puppeteer, { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
 import type { TodoDocument } from '../../src/domain/types'
-import { readPrintContract } from './contract'
+import { readPrintContract, readPrintPanelClamp } from './contract'
 
 const contract = readPrintContract()
+const clamp = readPrintPanelClamp()
 
 /** CSS reference pixel, fixed by the CSS specification. */
 const PX_PER_INCH = 96
@@ -14,15 +15,14 @@ const PX_PER_INCH = 96
 const POINTS_PER_INCH = 72
 const MM_PER_INCH = 25.4
 
+/** Float slack for a measured millimetre, not a permitted geometric deviation. */
+const EPSILON_MM = 0.05
+
 const pxToMm = (px: number): number => (px * MM_PER_INCH) / PX_PER_INCH
 const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_PER_INCH
 
-/**
- * The slack `src/styles/print.css` allows a panel under `@media print`, as the distance between its
- * `min-height: 209mm` and the recorded 210mm panel. Not a tolerance for measurement noise — it is
- * the size of the deviation #34 owns, and it shrinks to zero when #34 is resolved.
- */
-const PRINT_HEIGHT_CLAMP_SLACK_MM = 1
+/** Round to the tenth of a millimetre, so aggregate comparisons read as physical dimensions. */
+const round = (mm: number): number => Math.round(mm * 10) / 10
 
 /**
  * Document shapes worth measuring: one and two panels are partial sheets, the recorded panel count
@@ -50,11 +50,27 @@ const panelBreakDocument = (panelCount: number): TodoDocument => ({
   ]),
 })
 
+interface MeasuredBox {
+  widthMm: number
+  heightMm: number
+  offsetLeftMm: number
+}
+
 interface MeasuredSheet {
   transform: string
   widthMm: number
   heightMm: number
-  panels: { widthMm: number; heightMm: number; offsetLeftMm: number }[]
+  panels: MeasuredBox[]
+}
+
+interface Paper {
+  widthMm: number
+  heightMm: number
+}
+
+interface Measurement {
+  sheets: MeasuredSheet[]
+  paper: Paper[]
 }
 
 const launchBrowser = async (): Promise<Browser> => {
@@ -71,23 +87,20 @@ const launchBrowser = async (): Promise<Browser> => {
   }
 }
 
+/**
+ * Every measurement is taken once, up front, and each test is a pure assertion over the result.
+ * Browser work inside a test body would be swallowed by the `fails` markers below, which turn any
+ * rejection into a pass — a navigation error or a missing `/MediaBox` would then read as the known
+ * contract violation. Collecting here means such a failure aborts the whole suite instead.
+ */
 describe('printed page geometry', () => {
   let server: ViteDevServer
   let browser: Browser
   let page: Page
-  let appUrl: string
 
-  /** Seed a document of the given panel count and wait for its sheets to render. */
-  const render = async (panelCount: number): Promise<void> => {
-    await page.goto(appUrl, { waitUntil: 'networkidle0' })
-    await page.evaluate(
-      (key: string, document: string) => window.localStorage.setItem(key, document),
-      STORAGE_KEY,
-      JSON.stringify(panelBreakDocument(panelCount)),
-    )
-    await page.reload({ waitUntil: 'networkidle0' })
-    await page.waitForSelector('.print-page')
-  }
+  const measured = new Map<number, Measurement>()
+  let printMediaSheets: MeasuredSheet[] = []
+  let sheetsAfterRestore: MeasuredSheet[] = []
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -118,7 +131,7 @@ describe('printed page geometry', () => {
   }
 
   /** Every `/MediaBox` in the printed PDF, in millimetres — one per physical sheet. */
-  const measurePrintedPaper = async (): Promise<{ widthMm: number; heightMm: number }[]> => {
+  const measurePrintedPaper = async (): Promise<Paper[]> => {
     const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
     const boxes = [
       ...Buffer.from(pdf)
@@ -132,6 +145,57 @@ describe('printed page geometry', () => {
     if (boxes.length === 0) throw new Error('The generated PDF declares no /MediaBox')
     return boxes
   }
+
+  const render = async (appUrl: string, panelCount: number): Promise<void> => {
+    await page.goto(appUrl, { waitUntil: 'networkidle0' })
+    await page.evaluate(
+      (key: string, document: string) => window.localStorage.setItem(key, document),
+      STORAGE_KEY,
+      JSON.stringify(panelBreakDocument(panelCount)),
+    )
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('.print-page')
+  }
+
+  const forShape = (panelCount: number): Measurement => {
+    const result = measured.get(panelCount)
+    if (!result) throw new Error(`No measurement was collected for ${panelCount} panels`)
+    return result
+  }
+
+  beforeAll(async () => {
+    server = await createServer({ server: { port: 0 }, logLevel: 'silent' })
+    await server.listen()
+    const appUrl = server.resolvedUrls?.local[0]
+    if (!appUrl) throw new Error('The Vite dev server reported no local URL')
+
+    browser = await launchBrowser()
+    page = await browser.newPage()
+    // Wide enough that the preview renders at scale 1; expectUnscaled proves it did.
+    await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
+
+    for (const panelCount of PANEL_COUNTS) {
+      await render(appUrl, panelCount)
+      measured.set(panelCount, { sheets: await measureSheets(), paper: await measurePrintedPaper() })
+    }
+
+    // `@media print` in src/styles/print.css re-declares .print-page and .print-panel, so the
+    // screen measurement cannot speak for what a printer receives.
+    await render(appUrl, contract.panelsPerPage)
+    await page.emulateMediaType('print')
+    try {
+      printMediaSheets = await measureSheets()
+    } finally {
+      // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
+      await page.emulateMediaType(undefined)
+    }
+    sheetsAfterRestore = await measureSheets()
+  }, 300_000)
+
+  afterAll(async () => {
+    await browser?.close()
+    await server?.close()
+  })
 
   /**
    * The preview downscales to fit narrow viewports. Measuring a scaled sheet would report the wrong
@@ -155,34 +219,24 @@ describe('printed page geometry', () => {
     })
   }
 
-  beforeAll(async () => {
-    server = await createServer({ server: { port: 0 }, logLevel: 'silent' })
-    await server.listen()
-    const url = server.resolvedUrls?.local[0]
-    if (!url) throw new Error('The Vite dev server reported no local URL')
-    appUrl = url
-
-    browser = await launchBrowser()
-    page = await browser.newPage()
-    // Wide enough that the preview renders at scale 1; expectUnscaled proves it did.
-    await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
-  }, 180_000)
-
-  afterAll(async () => {
-    await browser?.close()
-    await server?.close()
-  })
-
   it('states a contract whose panels tile the sheet', () => {
     expect(contract.panelsPerPage * contract.panelWidthMm).toBe(contract.pageWidthMm)
     expect(contract.panelHeightMm).toBe(contract.pageHeightMm)
   })
 
-  it('renders one sheet of sequential panels at the recorded millimetre sizes', async () => {
-    await render(contract.panelsPerPage)
-    const sheets = await measureSheets()
+  it('measured every document shape', () => {
+    expect([...measured.keys()].sort((a, b) => a - b)).toEqual([...PANEL_COUNTS].sort((a, b) => a - b))
+    PANEL_COUNTS.forEach((panelCount) => {
+      const { sheets, paper } = forShape(panelCount)
+      expect(sheets).toHaveLength(Math.ceil(panelCount / contract.panelsPerPage))
+      expect(paper).toHaveLength(sheets.length)
+    })
+    expect(printMediaSheets.length).toBeGreaterThan(0)
+  })
 
-    expect(sheets).toHaveLength(1)
+  it('renders one sheet of sequential panels at the recorded millimetre sizes', () => {
+    const { sheets } = forShape(contract.panelsPerPage)
+
     expectUnscaled(sheets)
     expectSequentialPanels(sheets)
     expect(sheets[0].panels).toHaveLength(contract.panelsPerPage)
@@ -193,109 +247,92 @@ describe('printed page geometry', () => {
     })
   })
 
-  it('keeps that geometry under print media, where the stylesheet overrides it', async () => {
-    // `@media print` in src/styles/print.css re-declares .print-page and .print-panel, so the
-    // measurement above cannot speak for what a printer receives. Measure again under the media
-    // the paper actually uses.
-    await render(contract.panelsPerPage)
-    await page.emulateMediaType('print')
-    try {
-      const sheets = await measureSheets()
+  it.each(PANEL_COUNTS)('renders %i panels as sequential 99mm slots of full-height paper', (panelCount) => {
+    const { sheets, paper } = forShape(panelCount)
 
-      expectUnscaled(sheets)
-      expectSequentialPanels(sheets)
-      expect(sheets[0].panels).toHaveLength(contract.panelsPerPage)
-      expect(sheets[0].widthMm).toBeCloseTo(contract.pageWidthMm, 1)
-
-      // Height is bounded on both sides rather than asserted equal, and the slack is exactly the
-      // clamp `.print-panel` carries under `@media print`: `min-height: 209mm; max-height: 210mm`,
-      // so it settles 1mm short of the recorded 210mm while the paper stays 210mm. Asserting
-      // equality would fail against current main; asserting 209mm would encode the deviation as
-      // correct and break when #34 resolves it. The band accepts both the current 209mm and a
-      // fixed 210mm, and rejects anything else — a panel that collapses or overflows still fails.
-      // #34 owns the decision; when it lands, replace this band with equality.
-      const lowest = contract.panelHeightMm - PRINT_HEIGHT_CLAMP_SLACK_MM - 0.05
-      sheets[0].panels.forEach((panel) => {
-        expect(panel.heightMm).toBeLessThanOrEqual(contract.panelHeightMm + 0.05)
-        expect(panel.heightMm).toBeGreaterThanOrEqual(lowest)
-      })
-      expect(sheets[0].heightMm).toBeLessThanOrEqual(contract.pageHeightMm + 0.05)
-      expect(sheets[0].heightMm).toBeGreaterThanOrEqual(lowest)
-    } finally {
-      // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
-      await page.emulateMediaType(undefined)
-    }
-
-    // Prove the emulation was actually lifted, so a later test cannot silently inherit print media.
-    const restored = await measureSheets()
-    expect(restored[0].heightMm).toBeCloseTo(contract.pageHeightMm, 1)
+    expectUnscaled(sheets)
+    expectSequentialPanels(sheets)
+    sheets.forEach((sheet) => {
+      expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
+    })
+    // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
+    // comparison would fail on the rounding rather than on the geometry.
+    paper.forEach((sheet) => {
+      expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
+    })
   })
 
-  it.each(PANEL_COUNTS)(
-    'renders %i panels as sequential 99mm slots of full-height paper',
-    async (panelCount) => {
-      await render(panelCount)
-      const sheets = await measureSheets()
-
-      expect(sheets).toHaveLength(Math.ceil(panelCount / contract.panelsPerPage))
-      expectUnscaled(sheets)
-      expectSequentialPanels(sheets)
-      sheets.forEach((sheet) => {
-        expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
-      })
-
-      // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
-      // comparison would fail on the rounding rather than on the geometry.
-      const paper = await measurePrintedPaper()
-      expect(paper).toHaveLength(sheets.length)
-      paper.forEach((sheet) => {
-        expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
-      })
-    },
-    120_000,
-  )
-
-  it('prints a full sheet at the recorded physical size', async () => {
-    await render(contract.panelsPerPage)
-    const paper = await measurePrintedPaper()
+  it('prints a full sheet at the recorded physical size', () => {
+    const { paper } = forShape(contract.panelsPerPage)
 
     expect(paper).toHaveLength(1)
     expect(paper[0].widthMm).toBeCloseTo(contract.pageWidthMm, 0)
     expect(paper[0].heightMm).toBeCloseTo(contract.pageHeightMm, 0)
-  }, 60_000)
+  })
+
+  it('declares a print-media panel clamp that cannot exceed the recorded panel', () => {
+    // The ceiling is contract-owned: whatever the stylesheet declares, it may not let a panel grow
+    // past the paper. The floor is the stylesheet's own, asserted against the contract below.
+    expect(clamp.maxHeightMm).toBe(contract.panelHeightMm)
+    expect(clamp.minHeightMm).toBeLessThanOrEqual(clamp.maxHeightMm)
+  })
+
+  it('keeps that geometry under print media, where the stylesheet overrides it', () => {
+    expectUnscaled(printMediaSheets)
+    expectSequentialPanels(printMediaSheets)
+    expect(printMediaSheets[0].panels).toHaveLength(contract.panelsPerPage)
+    expect(printMediaSheets[0].widthMm).toBeCloseTo(contract.pageWidthMm, 1)
+
+    // Height is checked against the clamp parsed out of print.css, not a band written here: a
+    // tolerance owned by this file would be a second statement of a physical dimension, free to
+    // drift from the stylesheet. Rendering must honour what the stylesheet declares; whether the
+    // declared floor may sit below the contract at all is #34's question, asserted below.
+    printMediaSheets[0].panels.forEach((panel) => {
+      expect(panel.heightMm).toBeGreaterThanOrEqual(clamp.minHeightMm - EPSILON_MM)
+      expect(panel.heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
+    })
+    expect(printMediaSheets[0].heightMm).toBeGreaterThanOrEqual(clamp.minHeightMm - EPSILON_MM)
+    expect(printMediaSheets[0].heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
+  })
+
+  it('lifts the print emulation afterwards', () => {
+    expect(sheetsAfterRestore[0].heightMm).toBeCloseTo(contract.pageHeightMm, 1)
+  })
+
+  /**
+   * The contract for the printed panel height. `print.css` clamps a panel to `min-height: 209mm`
+   * under `@media print`, so it renders 1mm short of the recorded 210mm while the paper stays
+   * 210mm. #34 owns whether the contract or the clamp is authoritative.
+   *
+   * Marked `fails` because it does not hold yet. The body is one pure comparison of two parsed
+   * numbers — there is no I/O to swallow, so the only thing it can report is that mismatch, and
+   * vitest fails the test the moment it stops mismatching.
+   */
+  it.fails('clamps a printed panel to the full recorded height (blocked by #34)', () => {
+    expect(clamp.minHeightMm).toBe(contract.panelHeightMm)
+  })
 
   /**
    * The contract assertion the acceptance criterion asks for: every sheet a document produces is
    * the recorded page size with the recorded number of panel slots.
    *
-   * It is marked `fails` because it does not hold yet. `PrintPreview` assigns `@page page-1` and
-   * `page-2` named sizes, so partial and trailing sheets print 99mm and 198mm paper — the open
-   * defect #2, which #18 is scoped out of fixing (`Verification only. No change to pagination
-   * behaviour, the editor, or the print stylesheet.`).
+   * Marked `fails` because it does not hold yet. `PrintPreview` assigns `@page page-1` and `page-2`
+   * named sizes, so partial and trailing sheets print 99mm and 198mm paper — the open defect #2,
+   * which #18 is scoped out of fixing (`Verification only. No change to pagination behaviour, the
+   * editor, or the print stylesheet.`).
    *
-   * What is written here is the contract, not the defect: nothing in this test records 99mm or
-   * 198mm as acceptable. `fails` states that current main violates it, and vitest reports a failure
-   * the moment it starts passing — so when #2 lands, this becomes the enforcing test by deleting
-   * one word.
+   * What is written here is the contract, not the defect: nothing records 99mm or 198mm as
+   * acceptable. The body is a pure comparison over measurements already collected in `beforeAll`,
+   * so no browser error can be mistaken for the known violation, and it compares whole aggregates
+   * rather than looping, so every shape is exercised rather than stopping at the first mismatch.
    */
-  it.fails(
-    'prints every sheet at the recorded page size with the recorded panel slots (blocked by #2)',
-    async () => {
-      for (const panelCount of PANEL_COUNTS) {
-        await render(panelCount)
-        const sheets = await measureSheets()
-        const paper = await measurePrintedPaper()
+  it.fails('prints every sheet at the recorded page size with the recorded panel slots (blocked by #2)', () => {
+    const sheetWidths = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => round(s.widthMm)))
+    const slotCounts = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => s.panels.length))
+    const paperWidths = PANEL_COUNTS.flatMap((n) => forShape(n).paper.map((s) => round(s.widthMm)))
 
-        sheets.forEach((sheet) => {
-          expect(sheet.panels).toHaveLength(contract.panelsPerPage)
-          expect(sheet.widthMm).toBeCloseTo(contract.pageWidthMm, 1)
-        })
-        paper.forEach((sheet) => {
-          expect(sheet.widthMm).toBeCloseTo(contract.pageWidthMm, 0)
-          expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
-        })
-      }
-    },
-    240_000,
-  )
+    expect(sheetWidths).toEqual(sheetWidths.map(() => contract.pageWidthMm))
+    expect(slotCounts).toEqual(slotCounts.map(() => contract.panelsPerPage))
+    expect(paperWidths).toEqual(paperWidths.map(() => contract.pageWidthMm))
+  })
 })

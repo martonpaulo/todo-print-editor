@@ -57,3 +57,45 @@ export const readPrintContract = (): PrintContract => {
     panelHeightMm: Number(match[5]),
   }
 }
+
+/**
+ * The height clamp `src/styles/print.css` puts on a panel inside `@media print`. Parsed rather than
+ * repeated for the same reason the contract above is: a band written into the test would be a
+ * second, test-owned statement of a physical dimension that the stylesheet can silently move away
+ * from.
+ */
+export interface PrintPanelClamp {
+  minHeightMm: number
+  maxHeightMm: number
+}
+
+const PRINT_CSS_PATH = fileURLToPath(new URL('../../src/styles/print.css', import.meta.url))
+
+const PRINT_PANEL_RULE_PATTERN =
+  /@media print\b[\s\S]*?\.print-panel\s*\{([\s\S]*?)\}/
+
+const declaration = (block: string, property: string): number => {
+  const match = new RegExp(`${property}\\s*:\\s*(\\d+(?:\\.\\d+)?)mm`).exec(block)
+  if (!match) {
+    throw new Error(
+      `The @media print .print-panel rule in ${PRINT_CSS_PATH} declares no ${property} in mm. ` +
+        'Update tests/print-geometry/contract.ts to match its current shape.',
+    )
+  }
+  return Number(match[1])
+}
+
+export const readPrintPanelClamp = (): PrintPanelClamp => {
+  const rule = PRINT_PANEL_RULE_PATTERN.exec(readFileSync(PRINT_CSS_PATH, 'utf8'))
+  if (!rule) {
+    throw new Error(
+      `Could not find the @media print .print-panel rule in ${PRINT_CSS_PATH}. ` +
+        'Update tests/print-geometry/contract.ts to match its current shape.',
+    )
+  }
+
+  return {
+    minHeightMm: declaration(rule[1], 'min-height'),
+    maxHeightMm: declaration(rule[1], 'max-height'),
+  }
+}
