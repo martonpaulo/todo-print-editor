@@ -183,6 +183,7 @@ When the user must notice and respond to a proposed follow-up, material choice, 
 ## Agent skill paths
 
 - Product definition: `docs/product.md`
+- Performance budget and supported document scale: `docs/performance.md`
 - Domain glossary: `CONTEXT.md` (create and update only when canonical domain language is useful)
 
 ## Git and releases

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <title>Todo Print Editor performance harness</title>
+    <style>
+      #profile-output {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        margin: 0;
+        overflow: auto;
+        padding: 16px;
+        background: #ffffff;
+        font: 12px/1.5 ui-monospace, monospace;
+        white-space: pre-wrap;
+      }
+      #profile-output:empty {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <pre id="profile-output"></pre>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

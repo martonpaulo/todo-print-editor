@@ -91,6 +91,8 @@ Tests cover Markdown conversion, persisted-data validation, and atomic paginatio
 
 `npm run test:print` is the printed-page geometry check. It serves the app, drives it in headless Chrome, and measures the rendered sheet and its panels in millimetres against the printed-page contract recorded in `AGENTS.md`, which it parses rather than repeats. It also generates a PDF through the browser's own print path and measures the declared page box. It needs a browser, so it is kept out of `npm test`; `npm run check` runs it. The first run downloads Chrome into Puppeteer's cache if `npm install` did not already provision it.
 
+`npm run profile` drives a production build in a headless Chromium and reports the editing-latency profile. `docs/performance.md` records the supported document scale, the budget, and the measured results.
+
 ## Privacy and security
 
 Todo content is stored only in this browser under `localStorage`. The app has no backend, account system, analytics, or content API. Clearing site data removes the saved document.
@@ -104,6 +106,7 @@ Pull requests run lint, tests, and a production build. A validated push to `main
 - Only the documented Markdown subset round-trips to the visual model.
 - Content does not sync between browsers or devices.
 - A single list cannot exceed one panel; shorten it before printing.
+- Editing stays inside one frame up to 25 lists of 10 tasks; larger documents keep working but feel progressively slower. See `docs/performance.md`.
 - Exact physical output depends on 100% print scale and printer-driver behavior.
 - The public utility opts out of search indexing, but `noindex` is not access control.
 

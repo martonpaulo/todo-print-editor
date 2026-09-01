@@ -17,7 +17,9 @@
     "test:watch": "vitest",
     "test:print": "vitest run --config vitest.print.config.ts",
     "check": "npm run lint && npm run test && npm run test:print && npm run build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "profile:build": "vite build --config vite.profile.config.ts",
+    "profile": "npm run profile:build && node scripts/profile.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",
