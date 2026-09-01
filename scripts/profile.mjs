@@ -1,37 +1,28 @@
 #!/usr/bin/env node
 /**
- * Runs the performance harness (issue #5) in a headless Chromium and prints one
+ * Runs the performance harness (issue #5) in a headless Chrome and prints one
  * JSON report to stdout.
  *
  * The harness itself lives in `src/dev/harness.tsx` and must already be built
- * with `npm run profile:build`. This script starts `vite preview`, drives a
- * headless browser over the DevTools protocol without adding a dependency, and
- * runs every requested document scale in a fresh tab.
+ * with `npm run profile:build`; `npm run profile` does both. This script serves
+ * that build and drives the browser with Puppeteer, the same browser the
+ * printed-page geometry check uses, so both browser-driven checks provision and
+ * launch Chrome the same way.
  *
  * Usage: node scripts/profile.mjs [--scales 10,100,500] [--iterations 25] [--repeats 3]
  */
 
-import { spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import puppeteer from 'puppeteer'
+import { preview } from 'vite'
 
-const CHROMIUM_CANDIDATES = [
-  process.env.CHROME_PATH,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-].filter(Boolean)
+const CONFIG_FILE = fileURLToPath(new URL('../vite.profile.config.ts', import.meta.url))
 
-const PREVIEW_PORT = 4183
-const DEBUG_PORT = 9333
 // A fixed viewport keeps the preview scale, and therefore the measured layout,
 // identical between runs and between machines.
-const WINDOW = { width: 1600, height: 1000 }
+const VIEWPORT = { width: 1600, height: 1000 }
 
 const readArgument = (name, fallback) => {
   const index = process.argv.indexOf(`--${name}`)
@@ -58,79 +49,17 @@ const waitFor = async (probe, description, timeoutMs = 60_000) => {
   throw new Error(`Timed out waiting for ${description}`)
 }
 
-const findChromium = async () => {
-  const { access } = await import('node:fs/promises')
-  for (const candidate of CHROMIUM_CANDIDATES) {
-    try {
-      await access(candidate)
-      return candidate
-    } catch {
-      // try the next candidate
-    }
-  }
-  throw new Error(
-    `No Chromium binary found. Set CHROME_PATH to one. Looked at: ${CHROMIUM_CANDIDATES.join(', ')}`,
-  )
-}
-
-class DevToolsSession {
-  #socket
-  #nextId = 1
-  #pending = new Map()
-
-  static async connect(webSocketUrl) {
-    const session = new DevToolsSession()
-    session.#socket = new WebSocket(webSocketUrl)
-    session.#socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data)
-      const resolver = session.#pending.get(message.id)
-      if (!resolver) return
-      session.#pending.delete(message.id)
-      if (message.error) resolver.reject(new Error(message.error.message))
-      else resolver.resolve(message.result)
-    })
-    await new Promise((resolve, reject) => {
-      session.#socket.addEventListener('open', resolve, { once: true })
-      session.#socket.addEventListener('error', () => reject(new Error('DevTools socket failed')), {
-        once: true,
-      })
-    })
-    return session
-  }
-
-  send(method, params = {}, timeoutMs = 30_000) {
-    const id = this.#nextId++
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#pending.delete(id)
-        reject(new Error(`DevTools call ${method} timed out`))
-      }, timeoutMs)
-      this.#pending.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer)
-          resolve(value)
-        },
-        reject: (error) => {
-          clearTimeout(timer)
-          reject(error)
-        },
-      })
-      this.#socket.send(JSON.stringify({ id, method, params }))
-    })
-  }
-
-  async evaluate(expression) {
-    const { result, exceptionDetails } = await this.send('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    })
-    if (exceptionDetails) throw new Error(exceptionDetails.text)
-    return result.value
-  }
-
-  close() {
-    this.#socket.close()
+const launchBrowser = async () => {
+  const options = { args: ['--no-sandbox', '--disable-dev-shm-usage'] }
+  try {
+    return await puppeteer.launch(options)
+  } catch (error) {
+    // npm may be configured to skip install scripts, which is where Puppeteer
+    // normally provisions its pinned Chrome. Fetch it once through Puppeteer's
+    // own CLI rather than asking for a manual setup step.
+    if (!String(error).includes('Could not find Chrome')) throw error
+    execFileSync('npx', ['puppeteer', 'browsers', 'install', 'chrome'], { stdio: 'inherit' })
+    return await puppeteer.launch(options)
   }
 }
 
@@ -172,30 +101,23 @@ const medianOfRuns = (runs) => ({
   ),
 })
 
-const runScale = async ({ lists, tasks, iterations, warmup }) => {
-  const url = `http://127.0.0.1:${PREVIEW_PORT}/?lists=${lists}&tasks=${tasks}&iterations=${iterations}&warmup=${warmup}`
-  const target = await fetch(
-    `http://127.0.0.1:${DEBUG_PORT}/json/new?${encodeURIComponent(url)}`,
-    { method: 'PUT' },
-  ).then((response) => response.json())
-
-  // A fresh session per poll keeps the driver immune to a socket that drops
-  // while the page is navigating or busy under the 500-list load.
-  const poll = async () => {
-    const session = await DevToolsSession.connect(target.webSocketDebuggerUrl)
-    try {
-      const failure = await session.evaluate('window.__profileError ?? null')
-      if (failure) throw new TerminalError(`Harness failed: ${failure}`)
-      return await session.evaluate('window.__profileReport ?? null')
-    } finally {
-      session.close()
-    }
-  }
-
+const runScale = async ({ browser, baseUrl, lists, tasks, iterations, warmup }) => {
+  const url = `${baseUrl}?lists=${lists}&tasks=${tasks}&iterations=${iterations}&warmup=${warmup}`
+  const page = await browser.newPage()
   try {
-    return await waitFor(poll, `the ${lists}-list profile`, 900_000)
+    await page.setViewport(VIEWPORT)
+    await page.goto(url, { waitUntil: 'load' })
+    return await waitFor(
+      async () => {
+        const failure = await page.evaluate(() => window.__profileError ?? null)
+        if (failure) throw new TerminalError(`Harness failed: ${failure}`)
+        return page.evaluate(() => window.__profileReport ?? null)
+      },
+      `the ${lists}-list profile`,
+      900_000,
+    )
   } finally {
-    await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${target.id}`).catch(() => {})
+    await page.close()
   }
 }
 
@@ -208,56 +130,17 @@ const main = async () => {
   const warmup = Number(readArgument('warmup', 5))
   const repeats = Number(readArgument('repeats', 3))
 
-  const chromium = await findChromium()
-  const userDataDir = await mkdtemp(join(tmpdir(), 'todo-print-profile-'))
+  const server = await preview({ configFile: CONFIG_FILE, preview: { port: 0 }, logLevel: 'silent' })
+  const baseUrl = server.resolvedUrls?.local[0]
+  if (!baseUrl) throw new Error('The preview server reported no local URL')
 
-  const preview = spawn(
-    'npx',
-    [
-      'vite',
-      'preview',
-      '--config',
-      'vite.profile.config.ts',
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(PREVIEW_PORT),
-      '--strictPort',
-    ],
-    { stdio: 'ignore' },
-  )
-  const browser = spawn(
-    chromium,
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-extensions',
-      '--force-device-scale-factor=1',
-      `--window-size=${WINDOW.width},${WINDOW.height}`,
-      `--user-data-dir=${userDataDir}`,
-      `--remote-debugging-port=${DEBUG_PORT}`,
-      'about:blank',
-    ],
-    { stdio: 'ignore' },
-  )
-
+  const browser = await launchBrowser()
   try {
-    await waitFor(
-      () => fetch(`http://127.0.0.1:${PREVIEW_PORT}/`).then((response) => response.ok),
-      'the preview server',
-    )
-    const version = await waitFor(
-      () => fetch(`http://127.0.0.1:${DEBUG_PORT}/json/version`).then((response) => response.json()),
-      'the headless browser',
-    )
-
     const scaleReports = []
     for (const lists of scales) {
       const runs = []
       for (let repeat = 0; repeat < repeats; repeat += 1) {
-        runs.push(await runScale({ lists, tasks, iterations, warmup }))
+        runs.push(await runScale({ browser, baseUrl, lists, tasks, iterations, warmup }))
       }
       scaleReports.push(medianOfRuns(runs))
     }
@@ -265,8 +148,8 @@ const main = async () => {
     process.stdout.write(
       `${JSON.stringify(
         {
-          browser: version['User-Agent'],
-          viewport: WINDOW,
+          browser: await browser.version(),
+          viewport: VIEWPORT,
           generatedAt: new Date().toISOString(),
           scales: scaleReports,
         },
@@ -275,9 +158,8 @@ const main = async () => {
       )}\n`,
     )
   } finally {
-    browser.kill()
-    preview.kill()
-    await rm(userDataDir, { recursive: true, force: true }).catch(() => {})
+    await browser.close()
+    await server.close()
   }
 }
 

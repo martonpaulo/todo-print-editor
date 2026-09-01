@@ -19,7 +19,6 @@
     "check": "npm run lint && npm run test && npm run test:print && npm run build",
     "preview": "vite preview",
     "profile:build": "vite build --config vite.profile.config.ts",
-    "profile:serve": "vite preview --config vite.profile.config.ts --host 127.0.0.1 --port 4183 --strictPort",
     "profile": "npm run profile:build && node scripts/profile.mjs"
   },
   "dependencies": {

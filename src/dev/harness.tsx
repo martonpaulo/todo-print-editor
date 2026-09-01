@@ -123,11 +123,16 @@ const require$ = <T extends Element>(selector: string): T => {
   return element
 }
 
-const buttonByLabel = (label: string, index = 0): HTMLButtonElement => {
+/**
+ * Matches on `title`, not `aria-label`: the editor's accessible names name the
+ * list they act on, so they change with the document while the title stays the
+ * plain action.
+ */
+const buttonByTitle = (title: string, index = 0): HTMLButtonElement => {
   const button = Array.from(document.querySelectorAll('button')).filter(
-    (candidate) => candidate.getAttribute('aria-label') === label,
+    (candidate) => candidate.getAttribute('title') === title,
   )[index]
-  if (!button) throw new Error(`Harness could not find the "${label}" button #${index}`)
+  if (!button) throw new Error(`Harness could not find the "${title}" button #${index}`)
   return button
 }
 
@@ -171,7 +176,7 @@ const scenarios: Scenario[] = [
     // every pair of iterations returns the document to its generated order.
     step: (iteration) => {
       const moveDown = iteration % 2 === 0
-      buttonByLabel(moveDown ? COPY.moveListDown : COPY.moveListUp, moveDown ? 0 : 1).click()
+      buttonByTitle(moveDown ? COPY.moveListDown : COPY.moveListUp, moveDown ? 0 : 1).click()
     },
   },
   {
