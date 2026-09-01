@@ -12,7 +12,7 @@
 - Copyright: 2026 martonpaulo
 - Development language: English.
 - Product copy: English (`en-US`) only, with `en-US` as the fallback. Keep visible strings centralized; do not add a localization framework until another locale is requested.
-- Branch policy: interactive owner-led work happens directly on `main`. Orchestrated executors use issue branches and pull requests under `## Agent execution`.
+- Branch policy: every change reaches `main` through a pull request; `main` is protected by a ruleset requiring one approving review and the recorded status checks. Orchestrated executors use issue branches and pull requests under `## Agent execution`; the owner's own pull requests are approved through `skd approve`, because GitHub refuses an approval from the account that opened them.
 - Commit policy: commit only when the owner explicitly requests it. Use Conventional Commits in English.
 - Push policy: push only when the owner explicitly requests it and local validation has passed.
 - Product versioning: no user-visible versions, automatic increments, tags, releases, or changelog. The private package version remains the internal `0.0.0` unless an explicit migration changes this policy.
@@ -24,7 +24,7 @@
 - Merge policy: merge commits only, every commit of the branch preserved. Never squash.
 - Commit subject: a commit made for an issue ends with `(#<issue number>)`.
 - Delete branches after merge: enabled.
-- Default branch review policy: require one approving review and the recorded status checks for orchestrated pull requests once the approving GitHub App installation and required checks are verified. Enforcement is pending.
+- Default branch review policy: `main` requires one approving review, merge commits only, and the `validate` and `pr-conventions` status checks; `strict` stays off so a parallel lane does not re-run every open pull request after each merge. Enforced by ruleset `22041475` since 2026-09-01, approved by the `agent-approver` GitHub App (id `4779359`), which is installed on this repository.
 - Release, signing, and secret-storage policy: validated pushes to `main` deploy the static build to GitHub Pages through GitHub Actions. Use only the repository-scoped `GITHUB_TOKEN`; there are no release artifacts, signing identities, or project secrets.
 - Skills baseline revision: `665b67a3aef31c4a57bc70ee7f984ee5b0a9e124`
 - Skills baseline applied: `2026-09-01`
