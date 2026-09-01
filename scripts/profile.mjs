@@ -140,6 +140,7 @@ const METRICS = [
   'editToPaintMax',
   'editToLastCommitP95',
   'handlerReturnP95',
+  'reactCommitP95',
   'reactRenderP95',
   'printMeasurementP95',
   'printMeasurementCountP95',

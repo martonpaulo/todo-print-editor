@@ -23,6 +23,7 @@ interface Sample {
   editToPaint: number
   editToLastCommit: number
   handlerReturn: number
+  reactCommit: number
   reactRender: number
   printMeasurement: number
   printMeasurementCount: number
@@ -37,6 +38,7 @@ interface Summary {
   editToPaintMax: number
   editToLastCommitP95: number
   handlerReturnP95: number
+  reactCommitP95: number
   reactRenderP95: number
   printMeasurementP95: number
   printMeasurementCountP95: number
@@ -55,6 +57,7 @@ installProfileRecorder({
 })
 
 let renderDurations: number[] = []
+let commitDurations: number[] = []
 
 /**
  * End of the last task in which React committed.
@@ -75,6 +78,7 @@ const resetCounters = () => {
   collected['print-measurement'] = []
   collected.persistence = []
   renderDurations = []
+  commitDurations = []
   lastCommitTaskEnd = 0
 }
 
@@ -215,6 +219,7 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
       // to the handler, which is then the whole of its work.
       editToLastCommit: lastCommitTaskEnd > 0 ? lastCommitTaskEnd - start : handlerReturn,
       handlerReturn,
+      reactCommit: sum(commitDurations),
       reactRender: sum(renderDurations),
       printMeasurement: sum(collected['print-measurement']),
       printMeasurementCount: collected['print-measurement'].length,
@@ -236,6 +241,7 @@ const runScenario = async (scenario: Scenario, iterations: number): Promise<Summ
     editToPaintMax: pick((sample) => sample.editToPaint, 1),
     editToLastCommitP95: pick((sample) => sample.editToLastCommit, 0.95),
     handlerReturnP95: pick((sample) => sample.handlerReturn, 0.95),
+    reactCommitP95: pick((sample) => sample.reactCommit, 0.95),
     reactRenderP95: pick((sample) => sample.reactRender, 0.95),
     printMeasurementP95: pick((sample) => sample.printMeasurement, 0.95),
     printMeasurementCountP95: pick((sample) => sample.printMeasurementCount, 0.95),
@@ -271,12 +277,22 @@ export const runHarness = async (): Promise<void> => {
     <StrictMode>
       <Profiler
         id="app"
-        // `actualDuration` is the render phase only — it excludes the DOM
-        // mutation and the rest of the commit phase — so it is reported as
-        // render duration and no budget is read from it. The posted message is
-        // what times the commit: see `lastCommitTaskEnd`.
-        onRender={(_id, _phase, actualDuration) => {
+        // Three separate things are read here.
+        //
+        // `actualDuration` is the render phase only — it excludes DOM mutation
+        // and the rest of the commit — so it is reported as render duration.
+        //
+        // `commitTime` is stamped when React enters the commit phase, and React
+        // runs a Profiler's `onRender` after its whole subtree's layout effects,
+        // so `now() - commitTime` is the commit-phase duration: mutation plus
+        // every layout effect below, including the print measurement pass. It
+        // carries no task-queue or idle delay.
+        //
+        // The posted message times the end of the surrounding task; see
+        // `lastCommitTaskEnd`.
+        onRender={(_id, _phase, actualDuration, _baseDuration, _startTime, commitTime) => {
           renderDurations.push(actualDuration)
+          commitDurations.push(performance.now() - commitTime)
           commitTaskProbe.port2.postMessage(0)
         }}
       >
