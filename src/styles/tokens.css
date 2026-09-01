@@ -1,5 +1,5 @@
 :root {
-  /* Monochrome color tokens */
+  /* Monochrome primitives — the raw scale the semantic roles below compose */
   --color-ink: #111111;
   --color-ink-soft: #454545;
   --color-ink-muted: #717171;
@@ -9,7 +9,36 @@
   --color-surface-strong: #e8e8e5;
   --color-line: #d3d3cf;
   --color-line-strong: #9a9a94;
-  --color-focus: #111111;
+
+  /* Semantic text roles */
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-ink-soft);
+  --text-muted: var(--color-ink-muted);
+  --text-placeholder: var(--color-line-strong);
+
+  /* Semantic surface roles */
+  --surface-page: var(--color-paper);
+  --surface-canvas: var(--color-canvas);
+  --surface-subtle: var(--color-surface);
+  --surface-muted: var(--color-surface-strong);
+
+  /* Semantic border roles */
+  --border-width: 1px;
+  --border-width-emphasis: 2px;
+  --border-subtle: var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --border-emphasis: var(--color-ink);
+
+  /* Action roles — the inverted treatment shared by primary, hover, and selection surfaces */
+  --action-surface: var(--color-ink);
+  --action-text: var(--color-paper);
+  --action-border: var(--color-ink);
+  --action-surface-disabled: var(--color-surface-strong);
+  --action-text-disabled: var(--color-ink-muted);
+  --action-border-disabled: var(--color-line);
+
+  /* Status role — the attention treatment shared by overflow and invalid states */
+  --status-attention: var(--color-ink);
 
   /* Typography tokens */
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -18,7 +47,12 @@
   --text-xs: 0.6875rem;
   --text-sm: 0.8125rem;
   --text-lg: 1.125rem;
+  --font-weight-control: 650;
+  --font-weight-strong: 700;
+  --font-weight-action: 750;
+  --font-weight-title: 800;
   --tracking-wide: 0.1em;
+  --tracking-tight: -0.025em;
 
   /* Spacing tokens */
   --space-1: 0.25rem;
@@ -37,8 +71,12 @@
   --shadow-control: 0 1px 0 rgb(0 0 0 / 8%);
   --shadow-page: 0 1px 2px rgb(0 0 0 / 8%), 0 18px 60px rgb(0 0 0 / 14%);
   --transition-fast: 140ms ease;
+
+  /* Focus role */
+  --focus-ring-color: var(--color-ink);
   --focus-ring-width: 2px;
   --focus-ring-offset: 3px;
+
   --control-height: 2.65rem;
   --control-height-compact: 2.35rem;
 
@@ -46,6 +84,8 @@
   --editor-width: clamp(25rem, 34vw, 34rem);
 
   /* Physical print tokens — edit these to retune the paper layout */
+  --print-ink: #000000;
+  --print-paper: #ffffff;
   --print-page-width: 297mm;
   --print-page-height: 210mm;
   --print-panel-width: 99mm;
