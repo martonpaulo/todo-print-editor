@@ -21,7 +21,7 @@ const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_P
  * Panel breaks, not text volume, decide the panel count here. The geometry under test is physical,
  * so nothing in this document may depend on how a font happens to render on the running machine.
  */
-const threePanelDocument = (panelCount: number): TodoDocument => ({
+const panelBreakDocument = (panelCount: number): TodoDocument => ({
   version: 1,
   date: '2026-01-01',
   showDate: true,
@@ -43,7 +43,7 @@ interface MeasuredBox {
   offsetLeftMm: number
 }
 
-interface MeasuredPage {
+interface MeasuredSheet {
   transform: string
   page: MeasuredBox
   panels: MeasuredBox[]
@@ -68,39 +68,8 @@ describe('printed page geometry', () => {
   let browser: Browser
   let page: Page
 
-  beforeAll(async () => {
-    server = await createServer({ server: { port: 0 }, logLevel: 'silent' })
-    await server.listen()
-    const url = server.resolvedUrls?.local[0]
-    if (!url) throw new Error('The Vite dev server reported no local URL')
-
-    browser = await launchBrowser()
-    page = await browser.newPage()
-    // Wide enough that the preview renders at scale 1; the assertion below proves it did.
-    await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
-
-    await page.goto(url, { waitUntil: 'networkidle0' })
-    await page.evaluate(
-      (key: string, document: string) => window.localStorage.setItem(key, document),
-      STORAGE_KEY,
-      JSON.stringify(threePanelDocument(contract.panelsPerPage)),
-    )
-    await page.reload({ waitUntil: 'networkidle0' })
-    await page.waitForSelector('.print-page')
-  }, 180_000)
-
-  afterAll(async () => {
-    await browser?.close()
-    await server?.close()
-  })
-
-  it('states a contract whose panels tile the sheet', () => {
-    expect(contract.panelsPerPage * contract.panelWidthMm).toBe(contract.pageWidthMm)
-    expect(contract.panelHeightMm).toBe(contract.pageHeightMm)
-  })
-
-  it('renders one sheet of sequential panels at the recorded millimetre sizes', async () => {
-    const measured: MeasuredPage = await page.evaluate(() => {
+  const measureSheet = async (): Promise<MeasuredSheet> => {
+    const raw = await page.evaluate(() => {
       const sheet = window.document.querySelector('.print-page')
       if (!(sheet instanceof HTMLElement)) throw new Error('No .print-page was rendered')
       const sheetRect = sheet.getBoundingClientRect()
@@ -117,33 +86,100 @@ describe('printed page geometry', () => {
           toBox(panel.getBoundingClientRect()),
         ),
       }
-    }).then((raw) => ({
-      transform: raw.transform,
-      page: {
-        widthMm: pxToMm(raw.page.width),
-        heightMm: pxToMm(raw.page.height),
-        offsetLeftMm: pxToMm(raw.page.offsetLeft),
-      },
-      panels: raw.panels.map((panel) => ({
-        widthMm: pxToMm(panel.width),
-        heightMm: pxToMm(panel.height),
-        offsetLeftMm: pxToMm(panel.offsetLeft),
-      })),
-    }))
+    })
 
-    // The preview downscales to fit narrow viewports. Measuring a scaled sheet would report the
-    // wrong millimetres, so require the identity transform instead of dividing it back out.
+    const toMm = (box: { width: number; height: number; offsetLeft: number }): MeasuredBox => ({
+      widthMm: pxToMm(box.width),
+      heightMm: pxToMm(box.height),
+      offsetLeftMm: pxToMm(box.offsetLeft),
+    })
+
+    return { transform: raw.transform, page: toMm(raw.page), panels: raw.panels.map(toMm) }
+  }
+
+  /**
+   * The preview downscales to fit narrow viewports. Measuring a scaled sheet would report the wrong
+   * millimetres, so require the identity transform instead of dividing it back out.
+   */
+  const expectUnscaled = (measured: MeasuredSheet) => {
     expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(measured.transform)
+  }
 
+  const expectSequentialPanels = (measured: MeasuredSheet) => {
     expect(measured.page.widthMm).toBeCloseTo(contract.pageWidthMm, 1)
-    expect(measured.page.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
-
     expect(measured.panels).toHaveLength(contract.panelsPerPage)
     measured.panels.forEach((panel, index) => {
       expect(panel.widthMm).toBeCloseTo(contract.panelWidthMm, 1)
-      expect(panel.heightMm).toBeCloseTo(contract.panelHeightMm, 1)
       expect(panel.offsetLeftMm).toBeCloseTo(index * contract.panelWidthMm, 1)
     })
+  }
+
+  beforeAll(async () => {
+    server = await createServer({ server: { port: 0 }, logLevel: 'silent' })
+    await server.listen()
+    const url = server.resolvedUrls?.local[0]
+    if (!url) throw new Error('The Vite dev server reported no local URL')
+
+    browser = await launchBrowser()
+    page = await browser.newPage()
+    // Wide enough that the preview renders at scale 1; expectUnscaled proves it did.
+    await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
+
+    await page.goto(url, { waitUntil: 'networkidle0' })
+    await page.evaluate(
+      (key: string, document: string) => window.localStorage.setItem(key, document),
+      STORAGE_KEY,
+      JSON.stringify(panelBreakDocument(contract.panelsPerPage)),
+    )
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('.print-page')
+  }, 180_000)
+
+  afterAll(async () => {
+    await browser?.close()
+    await server?.close()
+  })
+
+  it('states a contract whose panels tile the sheet', () => {
+    expect(contract.panelsPerPage * contract.panelWidthMm).toBe(contract.pageWidthMm)
+    expect(contract.panelHeightMm).toBe(contract.pageHeightMm)
+  })
+
+  it('renders one sheet of sequential panels at the recorded millimetre sizes', async () => {
+    const measured = await measureSheet()
+
+    expectUnscaled(measured)
+    expectSequentialPanels(measured)
+    expect(measured.page.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
+    measured.panels.forEach((panel) => {
+      expect(panel.heightMm).toBeCloseTo(contract.panelHeightMm, 1)
+    })
+  })
+
+  it('keeps that geometry under print media, where the stylesheet overrides it', async () => {
+    // `@media print` in src/styles/print.css re-declares .print-page and .print-panel, so the
+    // measurement above cannot speak for what a printer receives. Measure again under the media
+    // the paper actually uses.
+    await page.emulateMediaType('print')
+    try {
+      const measured = await measureSheet()
+
+      expectUnscaled(measured)
+      expectSequentialPanels(measured)
+
+      // Height is bounded rather than equal here, and that is a finding rather than a looser
+      // assertion: `.print-panel` under `@media print` is clamped to
+      // `min-height: 209mm; max-height: 210mm`, so it settles 1mm short of the recorded 210mm
+      // panel while the sheet itself stays 210mm (proven by the /MediaBox test below). Asserting
+      // equality would fail against current main; asserting 209mm would encode the deviation as
+      // correct and break when it is fixed. Tracked in #34, which owns the decision.
+      measured.panels.forEach((panel) => {
+        expect(panel.heightMm).toBeLessThanOrEqual(contract.panelHeightMm + 0.05)
+      })
+      expect(measured.page.heightMm).toBeLessThanOrEqual(contract.pageHeightMm + 0.05)
+    } finally {
+      await page.emulateMediaType(null)
+    }
   })
 
   it('prints a sheet of the recorded physical size', async () => {
@@ -156,8 +192,8 @@ describe('printed page geometry', () => {
     const widthMm = pointsToMm(Number(mediaBox[3]) - Number(mediaBox[1]))
     const heightMm = pointsToMm(Number(mediaBox[4]) - Number(mediaBox[2]))
 
-    // A quarter of a millimetre: the PDF writes points rounded to two decimals, so an exact
-    // millimetre comparison would fail on the rounding rather than on the geometry.
+    // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
+    // comparison would fail on the rounding rather than on the geometry.
     expect(widthMm).toBeCloseTo(contract.pageWidthMm, 0)
     expect(heightMm).toBeCloseTo(contract.pageHeightMm, 0)
   }, 60_000)
