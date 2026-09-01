@@ -10,9 +10,11 @@ the canonical owner of the performance budget; issue #5 established it.
 full editing responsiveness.**
 
 The number is measured, not chosen. At 25 lists every profiled interaction paints
-within one frame of the edit and every other budget below holds. At 50 lists four
-of five interactions miss frames, and at 100 lists and above every one of them
-does.
+within one frame of the edit and every other budget below holds. At 50 lists three
+of five interactions miss frames — typing, reordering, and settings changes — and
+at 100 lists those three miss by roughly twice a frame while Markdown typing
+reaches the boundary at 20.3 ms. At 500 lists every interaction misses by an
+order of magnitude.
 
 Nothing enforces the limit, and nothing should without a separate product
 decision: larger documents keep working and stay correct, they simply feel
@@ -142,7 +144,7 @@ measurement, and both are corrected above:
   unmemoized build missing frames at 25 lists and suggested the memoization moved
   the supported maximum from 10 lists to 25. Repeated on Chrome at steady load, it
   does not reproduce: both builds paint within a frame at 25 lists, and the
-  memoization improves commit and render duration by roughly 10–25% there without
+  memoization improves commit and render duration by roughly 10–30% there without
   changing the supported scale.
 - The same contaminated run put the print measurement pass at 8.8 ms p95 at the
   supported maximum, and this document recorded it as a budget that could not be
@@ -160,7 +162,7 @@ replaces exactly one list object, so the bail-out reduces the DOM React rewrites
 per keystroke from the whole document to one list.
 
 It is a small, consistent improvement rather than a rescue: render and commit
-duration fall by roughly 10–25% between 25 and 100 lists, the effect is inside the
+duration fall by roughly 10–30% between 25 and 100 lists, the effect is inside the
 noise at 10 lists and at 500, and the supported scale is 25 lists with or without
 it. It is kept because it is a pure rendering change — the same elements from the
 same props, so pagination inputs and print output are unchanged — that the profile
