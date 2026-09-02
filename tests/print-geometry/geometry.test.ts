@@ -189,39 +189,19 @@ describe('printed page geometry', () => {
     }))
   }
 
-  /**
-   * Every `/MediaBox` in the printed PDF, in millimetres — one per physical sheet.
-   *
-   * Read per page object rather than by scanning the whole file, because `/MediaBox` is an
-   * inheritable attribute: a writer may also put one on the `/Pages` tree node as the default for
-   * pages that omit it. That box is not a sheet, and a whole-file scan would count it as one,
-   * reporting a page too many for every document.
-   */
+  /** Every `/MediaBox` in the printed PDF, in millimetres — one per physical sheet. */
   const measurePrintedPaper = async (): Promise<Paper[]> => {
-    const pdf = Buffer.from(await page.pdf({ preferCSSPageSize: true, printBackground: true }))
-    const source = pdf.toString('latin1')
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
+    const boxes = [
+      ...Buffer.from(pdf)
+        .toString('latin1')
+        .matchAll(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/g),
+    ].map((match) => ({
+      widthMm: pointsToMm(Number(match[3]) - Number(match[1])),
+      heightMm: pointsToMm(Number(match[4]) - Number(match[2])),
+    }))
 
-    const mediaBox = (body: string): Paper | null => {
-      const match = /\/MediaBox\s*\[\s*([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s*\]/.exec(body)
-      if (!match) return null
-      return {
-        widthMm: pointsToMm(Number(match[3]) - Number(match[1])),
-        heightMm: pointsToMm(Number(match[4]) - Number(match[2])),
-      }
-    }
-
-    const objects = [...source.matchAll(/\d+\s+\d+\s+obj\b([\s\S]*?)\bendobj/g)].map((m) => m[1])
-    // `/Type /Page` must not also match `/Type /Pages`, which is the tree node above them.
-    const isPage = (body: string) => /\/Type\s*\/Page(?![a-zA-Z])/.test(body)
-    const inherited = objects.find((body) => /\/Type\s*\/Pages\b/.test(body))
-    const fallback = inherited ? mediaBox(inherited) : null
-
-    const boxes = objects
-      .filter(isPage)
-      .map((body) => mediaBox(body) ?? fallback)
-      .filter((box): box is Paper => box !== null)
-
-    if (boxes.length === 0) throw new Error('The generated PDF declares no page /MediaBox')
+    if (boxes.length === 0) throw new Error('The generated PDF declares no /MediaBox')
     return boxes
   }
 
