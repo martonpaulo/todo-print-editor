@@ -83,16 +83,29 @@ interface Measurement {
   paper: Paper[]
 }
 
-const launchBrowser = async (): Promise<Browser> => {
-  const options = { args: ['--no-sandbox', '--disable-dev-shm-usage'] }
+/**
+ * Both engines the product supports. The paper contract is physical, and two layout engines can
+ * disagree about it, so a single-engine check cannot speak for what a user prints. Chrome is driven
+ * over CDP; Firefox exposes no CDP but does implement WebDriver BiDi `browsingContext.print`, which
+ * is what makes its printed `/MediaBox` observable here.
+ */
+const BROWSERS = ['chrome', 'firefox'] as const
+type BrowserName = (typeof BROWSERS)[number]
+
+const launchBrowser = async (name: BrowserName): Promise<Browser> => {
+  // The sandbox flags are Chromium's and are rejected by Firefox's BiDi launcher.
+  const options =
+    name === 'chrome'
+      ? { browser: name, args: ['--no-sandbox', '--disable-dev-shm-usage'] }
+      : { browser: name }
   try {
     return await puppeteer.launch(options)
   } catch (error) {
     // npm may be configured to skip install scripts, which is where Puppeteer normally provisions
-    // its pinned Chrome. Fetch it once through Puppeteer's own CLI rather than asking for a manual
-    // setup step the contract says must not exist.
-    if (!String(error).includes('Could not find Chrome')) throw error
-    execFileSync('npx', ['puppeteer', 'browsers', 'install', 'chrome'], { stdio: 'inherit' })
+    // its pinned browsers. Fetch one once through Puppeteer's own CLI rather than asking for a
+    // manual setup step the contract says must not exist.
+    if (!/Could not find (Chrome|Firefox)/i.test(String(error))) throw error
+    execFileSync('npx', ['puppeteer', 'browsers', 'install', name], { stdio: 'inherit' })
     return await puppeteer.launch(options)
   }
 }
@@ -108,7 +121,8 @@ describe('printed page geometry', () => {
   let browser: Browser
   let page: Page
 
-  const measured = new Map<number, Measurement>()
+  /** Measurements per engine, keyed by browser and then by the document's panel count. */
+  const measured = new Map<BrowserName, Map<number, Measurement>>()
   let printMediaSheets: MeasuredSheet[] = []
   let sheetsAfterRestore: MeasuredSheet[] = []
 
@@ -140,19 +154,38 @@ describe('printed page geometry', () => {
     }))
   }
 
-  /** Every `/MediaBox` in the printed PDF, in millimetres — one per physical sheet. */
+  /**
+   * Every `/MediaBox` in the printed PDF, in millimetres — one per physical sheet.
+   *
+   * Read per page object rather than by scanning the whole file for `/MediaBox`, because Firefox
+   * also writes one on the `/Pages` tree node as the inheritable default. That box is not a sheet,
+   * and counting it would report one page too many for every document.
+   */
   const measurePrintedPaper = async (): Promise<Paper[]> => {
-    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
-    const boxes = [
-      ...Buffer.from(pdf)
-        .toString('latin1')
-        .matchAll(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/g),
-    ].map((match) => ({
-      widthMm: pointsToMm(Number(match[3]) - Number(match[1])),
-      heightMm: pointsToMm(Number(match[4]) - Number(match[2])),
-    }))
+    const pdf = Buffer.from(await page.pdf({ preferCSSPageSize: true, printBackground: true }))
+    const source = pdf.toString('latin1')
 
-    if (boxes.length === 0) throw new Error('The generated PDF declares no /MediaBox')
+    const mediaBox = (body: string): Paper | null => {
+      const match = /\/MediaBox\s*\[\s*([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s*\]/.exec(body)
+      if (!match) return null
+      return {
+        widthMm: pointsToMm(Number(match[3]) - Number(match[1])),
+        heightMm: pointsToMm(Number(match[4]) - Number(match[2])),
+      }
+    }
+
+    const objects = [...source.matchAll(/\d+\s+\d+\s+obj\b([\s\S]*?)\bendobj/g)].map((m) => m[1])
+    // `/Type /Page` must not also match `/Type /Pages`, which is the tree node above them.
+    const isPage = (body: string) => /\/Type\s*\/Page(?![a-zA-Z])/.test(body)
+    const inherited = objects.find((body) => /\/Type\s*\/Pages\b/.test(body))
+    const fallback = inherited ? mediaBox(inherited) : null
+
+    const boxes = objects
+      .filter(isPage)
+      .map((body) => mediaBox(body) ?? fallback)
+      .filter((box): box is Paper => box !== null)
+
+    if (boxes.length === 0) throw new Error('The generated PDF declares no page /MediaBox')
     return boxes
   }
 
@@ -167,9 +200,11 @@ describe('printed page geometry', () => {
     await page.waitForSelector('.print-page')
   }
 
-  const forShape = (panelCount: number): Measurement => {
-    const result = measured.get(panelCount)
-    if (!result) throw new Error(`No measurement was collected for ${panelCount} panels`)
+  const forShape = (panelCount: number, browserName: BrowserName = 'chrome'): Measurement => {
+    const result = measured.get(browserName)?.get(panelCount)
+    if (!result) {
+      throw new Error(`No ${browserName} measurement was collected for ${panelCount} panels`)
+    }
     return result
   }
 
@@ -179,28 +214,38 @@ describe('printed page geometry', () => {
     const appUrl = server.resolvedUrls?.local[0]
     if (!appUrl) throw new Error('The Vite dev server reported no local URL')
 
-    browser = await launchBrowser()
-    page = await browser.newPage()
-    // Wide enough that the preview renders at scale 1; expectUnscaled proves it did.
-    await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
+    for (const browserName of BROWSERS) {
+      browser = await launchBrowser(browserName)
+      page = await browser.newPage()
+      // Wide enough that the preview renders at scale 1; expectUnscaled proves it did.
+      await page.setViewport({ width: 2600, height: 1600, deviceScaleFactor: 1 })
 
-    for (const panelCount of PANEL_COUNTS) {
-      await render(appUrl, panelCount)
-      measured.set(panelCount, { sheets: await measureSheets(), paper: await measurePrintedPaper() })
-    }
+      const shapes = new Map<number, Measurement>()
+      for (const panelCount of PANEL_COUNTS) {
+        await render(appUrl, panelCount)
+        shapes.set(panelCount, { sheets: await measureSheets(), paper: await measurePrintedPaper() })
+      }
+      measured.set(browserName, shapes)
 
-    // `@media print` in src/styles/print.css re-declares .print-page and .print-panel, so the
-    // screen measurement cannot speak for what a printer receives.
-    await render(appUrl, contract.panelsPerPage)
-    await page.emulateMediaType('print')
-    try {
-      printMediaSheets = await measureSheets()
-    } finally {
-      // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
-      await page.emulateMediaType(undefined)
+      // `@media print` in src/styles/print.css re-declares .print-page and .print-panel, so the
+      // screen measurement cannot speak for what a printer receives. Gecko exposes no print-media
+      // emulation — it needs CDP — so this stays Chrome-only, and the printed `/MediaBox` above is
+      // what carries the Firefox side of the paper contract.
+      if (browserName === 'chrome') {
+        await render(appUrl, contract.panelsPerPage)
+        await page.emulateMediaType('print')
+        try {
+          printMediaSheets = await measureSheets()
+        } finally {
+          // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
+          await page.emulateMediaType(undefined)
+        }
+        sheetsAfterRestore = await measureSheets()
+      }
+
+      await browser.close()
     }
-    sheetsAfterRestore = await measureSheets()
-  }, 300_000)
+  }, 600_000)
 
   afterAll(async () => {
     await browser?.close()
@@ -234,18 +279,24 @@ describe('printed page geometry', () => {
     expect(contract.panelHeightMm).toBe(contract.pageHeightMm)
   })
 
-  it('measured every document shape', () => {
-    expect([...measured.keys()].sort((a, b) => a - b)).toEqual([...PANEL_COUNTS].sort((a, b) => a - b))
-    PANEL_COUNTS.forEach((panelCount) => {
-      const { sheets, paper } = forShape(panelCount)
-      expect(sheets).toHaveLength(Math.ceil(panelCount / contract.panelsPerPage))
-      expect(paper).toHaveLength(sheets.length)
+  it('measured every document shape in every supported engine', () => {
+    expect([...measured.keys()].sort()).toEqual([...BROWSERS].sort())
+    BROWSERS.forEach((browserName) => {
+      const shapes = measured.get(browserName)
+      expect([...(shapes?.keys() ?? [])].sort((a, b) => a - b)).toEqual(
+        [...PANEL_COUNTS].sort((a, b) => a - b),
+      )
+      PANEL_COUNTS.forEach((panelCount) => {
+        const { sheets, paper } = forShape(panelCount, browserName)
+        expect(sheets).toHaveLength(Math.ceil(panelCount / contract.panelsPerPage))
+        expect(paper).toHaveLength(sheets.length)
+      })
     })
     expect(printMediaSheets.length).toBeGreaterThan(0)
   })
 
-  it('renders one sheet of sequential panels at the recorded millimetre sizes', () => {
-    const { sheets } = forShape(contract.panelsPerPage)
+  it.each(BROWSERS)('renders one sheet of sequential panels at the recorded millimetre sizes in %s', (browserName) => {
+    const { sheets } = forShape(contract.panelsPerPage, browserName)
 
     expectUnscaled(sheets)
     expectSequentialPanels(sheets)
@@ -257,8 +308,12 @@ describe('printed page geometry', () => {
     })
   })
 
-  it.each(PANEL_COUNTS)('renders %i panels as sequential 99mm slots of full-height paper', (panelCount) => {
-    const { sheets, paper } = forShape(panelCount)
+  const SHAPES_BY_BROWSER = BROWSERS.flatMap((browserName) =>
+    PANEL_COUNTS.map((panelCount) => [browserName, panelCount] as const),
+  )
+
+  it.each(SHAPES_BY_BROWSER)('%s renders %i panels as sequential slots of full-height paper', (browserName, panelCount) => {
+    const { sheets, paper } = forShape(panelCount, browserName)
 
     expectUnscaled(sheets)
     expectSequentialPanels(sheets)
@@ -266,7 +321,9 @@ describe('printed page geometry', () => {
       expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 1)
     })
     // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
-    // comparison would fail on the rounding rather than on the geometry.
+    // comparison would fail on the rounding rather than on the geometry. Firefox rounds harder
+    // still — it writes integer points, so A4's 595.28pt height is emitted as 596pt, or 210.3mm.
+    // That is the unit, not the paper.
     //
     // Every sheet's paper is pinned to its slot count times the recorded panel width, a number that
     // comes from `AGENTS.md`. Since #2 every sheet carries the full slot count, so this is the
@@ -277,8 +334,8 @@ describe('printed page geometry', () => {
     })
   })
 
-  it('prints a full sheet at the recorded physical size', () => {
-    const { paper } = forShape(contract.panelsPerPage)
+  it.each(BROWSERS)('prints a full sheet at the recorded physical size in %s', (browserName) => {
+    const { paper } = forShape(contract.panelsPerPage, browserName)
 
     expect(paper).toHaveLength(1)
     expect(paper[0].widthMm).toBeCloseTo(contract.pageWidthMm, 0)
@@ -344,10 +401,11 @@ describe('printed page geometry', () => {
    * error can be reported as a geometry result, and it compares whole aggregates rather than
    * looping, so every shape is exercised rather than stopping at the first mismatch.
    */
-  it('prints every sheet at the recorded page size with the recorded panel slots', () => {
-    const sheetWidths = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => round(s.widthMm)))
-    const slotCounts = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => s.panels.length))
-    const paperWidths = PANEL_COUNTS.flatMap((n) => forShape(n).paper.map((s) => round(s.widthMm)))
+  it.each(BROWSERS)('prints every sheet at the recorded page size with the recorded panel slots in %s', (browserName) => {
+    const shapes = PANEL_COUNTS.map((n) => forShape(n, browserName))
+    const sheetWidths = shapes.flatMap((m) => m.sheets.map((s) => round(s.widthMm)))
+    const slotCounts = shapes.flatMap((m) => m.sheets.map((s) => s.panels.length))
+    const paperWidths = shapes.flatMap((m) => m.paper.map((s) => round(s.widthMm)))
 
     expect(sheetWidths).toEqual(sheetWidths.map(() => contract.pageWidthMm))
     expect(slotCounts).toEqual(slotCounts.map(() => contract.panelsPerPage))
