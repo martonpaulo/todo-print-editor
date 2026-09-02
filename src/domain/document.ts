@@ -24,9 +24,9 @@ export const createTodoItem = (text = ''): TodoItem => ({
   checked: false,
 })
 
-// Structural factories carry no wording: a caller that shows a list to a user supplies the title
-// from centralized product copy, so `src/copy.ts` never participates in building the persisted
-// model. `items` defaults to one empty task because an editable list always has a row.
+// Structural factories carry no wording: callers choose the persisted title, including an empty
+// title for an untitled list, so `src/copy.ts` never participates in building the model. `items`
+// defaults to one empty task because an editable list always has a row.
 export const createList = (title: string, items: readonly string[] = ['']): ListBlock => ({
   id: createId('list'),
   kind: 'list',

@@ -60,6 +60,31 @@ describe('Markdown document conversion', () => {
     })
   })
 
+  it('creates untitled lists from bare tasks at the document start and after a panel break', () => {
+    const result = parseMarkdown(
+      '- [ ] First task\n- [x] Second task\n\n---\n\n- [ ] Next panel task',
+      baseDocument,
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.document.blocks).toMatchObject([
+      {
+        kind: 'list',
+        title: '',
+        items: [
+          { text: 'First task', checked: false },
+          { text: 'Second task', checked: true },
+        ],
+      },
+      { kind: 'panel-break' },
+      {
+        kind: 'list',
+        title: '',
+        items: [{ text: 'Next panel task', checked: false }],
+      },
+    ])
+  })
+
   it('serializes the supported subset without leaking implementation IDs', () => {
     const document: TodoDocument = {
       ...baseDocument,
@@ -81,6 +106,47 @@ describe('Markdown document conversion', () => {
     expect(serializeMarkdown(document)).toBe(
       '# 2026-08-24\n\n## Priorities\n- [ ] Ship the draft\n- [x] Archive notes\n\n---',
     )
+  })
+
+  it('serializes untitled lists without losing explicit list boundaries on round trip', () => {
+    const document: TodoDocument = {
+      ...baseDocument,
+      blocks: [
+        {
+          id: 'list-untitled-first',
+          kind: 'list',
+          title: '',
+          items: [{ id: 'item-first', text: 'First task', checked: false }],
+        },
+        {
+          id: 'list-named',
+          kind: 'list',
+          title: 'Named',
+          items: [{ id: 'item-named', text: 'Named task', checked: true }],
+        },
+        {
+          id: 'list-untitled-adjacent',
+          kind: 'list',
+          title: '',
+          items: [{ id: 'item-adjacent', text: 'Adjacent task', checked: false }],
+        },
+        { id: 'break-1', kind: 'panel-break' },
+        {
+          id: 'list-untitled-panel',
+          kind: 'list',
+          title: '',
+          items: [{ id: 'item-panel', text: 'Panel task', checked: false }],
+        },
+        { id: 'list-untitled-empty', kind: 'list', title: '', items: [] },
+      ],
+    }
+
+    const source = serializeMarkdown(document)
+
+    expect(source).toBe(
+      '- [ ] First task\n\n## Named\n- [x] Named task\n\n##\n- [ ] Adjacent task\n\n---\n\n- [ ] Panel task\n\n##',
+    )
+    expect(parseMarkdown(source, document)).toEqual({ document, errors: [] })
   })
 
   it('reports unsupported content instead of silently discarding it', () => {

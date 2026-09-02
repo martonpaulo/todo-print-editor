@@ -96,4 +96,20 @@ describe('PrintPreview page structure', () => {
     })
     expect(container.innerHTML).not.toMatch(/\b(99|198)mm\b/)
   })
+
+  it('renders tasks without a heading or divider when a list title is blank', () => {
+    const document = documentOfPanels(1)
+    const list = document.blocks.find((block) => block.kind === 'list')
+    if (!list || list.kind !== 'list') throw new Error('The fixture rendered no list')
+    list.title = '   '
+
+    const { container } = render(
+      <PrintPreview document={document} onLayoutStatusChange={() => {}} />,
+    )
+    const previewList = container.querySelector('.print-pages .print-list')
+
+    expect(previewList).toHaveTextContent('A task')
+    expect(previewList?.querySelector('h2')).toBeNull()
+    expect(previewList?.querySelector('.print-list__rule')).toBeNull()
+  })
 })

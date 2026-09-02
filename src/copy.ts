@@ -70,7 +70,7 @@ export const COPY = {
   removedPanelBreak: 'Panel break removed.',
   markdownLabel: 'Markdown source',
   markdownHelp:
-    'Use ## for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
+    'Use optional ## headings for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
   markdownInvalid: 'Previewing the last valid version',
   overflowTitle: 'One list is too tall for a panel.',
   overflowDescription: 'Shorten the highlighted list before printing. Lists are never split.',
