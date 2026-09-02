@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { COPY } from '../copy'
-import { paginateBlocks } from '../domain/pagination'
+import { groupPanelsIntoPages, PANELS_PER_PAGE, paginateBlocks } from '../domain/pagination'
 import { recordProfileSample } from '../profiling'
 import type { ListBlock, TodoDocument } from '../domain/types'
 
@@ -23,6 +23,15 @@ interface MeasurementState {
   listGap: number
   ready: boolean
 }
+
+/**
+ * Pixels held back from every measured panel capacity. Browser layout rounds a panel's content box
+ * and the paginated lists inside it independently, so a list measured at exactly the panel height
+ * can still spill by a fraction once it is laid out in place. Subtracted here, at the measurement
+ * boundary, so `paginateBlocks` receives final effective numbers and applies no allowance of its
+ * own — the same panel then has the same capacity however it was created.
+ */
+const MEASUREMENT_SAFETY_PX = 15
 
 const EMPTY_MEASUREMENTS: MeasurementState = {
   listHeights: {},
@@ -93,12 +102,19 @@ const PanelHeader = ({ document, panelIndex, panelCount }: PanelHeaderProps) => 
 
 interface PrintPanelProps {
   document: TodoDocument
-  lists: ListBlock[] | null
+  lists: ListBlock[]
   panelIndex: number
   panelCount: number
   overflowListIds: string[]
   capacityAttribute?: 'first' | 'regular'
 }
+
+/**
+ * A slot the document does not reach. It occupies its share of the sheet so the paper keeps its
+ * three panel slots, and carries nothing: no date, no numbering, no lists, and no element an
+ * assistive technology would announce.
+ */
+const FillerPanel = () => <div className="print-panel print-panel--filler" aria-hidden="true" />
 
 const PrintPanel = ({
   document,
@@ -108,25 +124,17 @@ const PrintPanel = ({
   overflowListIds,
   capacityAttribute,
 }: PrintPanelProps) => (
-  <article className={`print-panel${lists === null ? ' print-panel--filler' : ''}`}>
-    {lists !== null && (
-      <>
-        <PanelHeader document={document} panelIndex={panelIndex} panelCount={panelCount} />
-        <div
-          className="print-panel__lists"
-          data-capacity-first={capacityAttribute === 'first' ? '' : undefined}
-          data-capacity-regular={capacityAttribute === 'regular' ? '' : undefined}
-        >
-          {lists.map((list) => (
-            <PrintList
-              key={list.id}
-              list={list}
-              overflowing={overflowListIds.includes(list.id)}
-            />
-          ))}
-        </div>
-      </>
-    )}
+  <article className="print-panel">
+    <PanelHeader document={document} panelIndex={panelIndex} panelCount={panelCount} />
+    <div
+      className="print-panel__lists"
+      data-capacity-first={capacityAttribute === 'first' ? '' : undefined}
+      data-capacity-regular={capacityAttribute === 'regular' ? '' : undefined}
+    >
+      {lists.map((list) => (
+        <PrintList key={list.id} list={list} overflowing={overflowListIds.includes(list.id)} />
+      ))}
+    </div>
   </article>
 )
 
@@ -207,21 +215,23 @@ const usePrintMeasurements = (document: TodoDocument) => {
         if (id) listHeights[id] = element.getBoundingClientRect().height
       })
 
-      const firstPanelCapacity =
+      const measuredFirstPanel =
         root.querySelector<HTMLElement>('[data-capacity-first]')?.getBoundingClientRect().height ?? 0
-      const panelCapacity =
+      const measuredPanel =
         root.querySelector<HTMLElement>('[data-capacity-regular]')?.getBoundingClientRect().height ?? 0
       const listGap =
         root.querySelector<HTMLElement>('[data-measure-gap]')?.getBoundingClientRect().width ?? 0
       const listCount = document.blocks.filter((block) => block.kind === 'list').length
       const next = {
         listHeights,
-        firstPanelCapacity,
-        panelCapacity,
+        // The allowance is applied once, here, to both capacities alike; pagination consumes the
+        // result as final.
+        firstPanelCapacity: Math.max(0, measuredFirstPanel - MEASUREMENT_SAFETY_PX),
+        panelCapacity: Math.max(0, measuredPanel - MEASUREMENT_SAFETY_PX),
         listGap,
         ready:
-          firstPanelCapacity > 0 &&
-          panelCapacity > 0 &&
+          measuredFirstPanel > 0 &&
+          measuredPanel > 0 &&
           Object.keys(listHeights).length === listCount,
       }
 
@@ -304,10 +314,8 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
   )
 
   const panelCount = layout.panels.length
-  const pageCount = Math.max(1, Math.ceil(panelCount / 3))
-  const pages = Array.from({ length: pageCount }, (_, pageIndex) =>
-    Array.from({ length: 3 }, (_, slotIndex) => layout.panels[pageIndex * 3 + slotIndex] ?? null).filter(p => p !== null),
-  )
+  const pages = useMemo(() => groupPanelsIntoPages(layout.panels), [layout.panels])
+  const pageCount = pages.length
 
   useEffect(() => {
     onLayoutStatusChange({
@@ -318,74 +326,45 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
     })
   }, [layout.overflowListIds, measurements.ready, onLayoutStatusChange, pageCount, panelCount])
 
+  // Every sheet is the same paper, so the shell only mirrors the one measured page box; its size
+  // and its three columns come from the print tokens in the stylesheet, never from arithmetic here.
+  const shellStyle = metrics
+    ? { width: `${metrics.width * metrics.scale}px`, height: `${metrics.height * metrics.scale}px` }
+    : undefined
+  const pageStyle = metrics ? { transform: `scale(${metrics.scale})` } : undefined
+
   return (
     <>
-      <style>{`
-        @media print {
-          @page { size: A4 landscape; margin: 0; }
-          @page page-1 { size: 99mm 210mm; margin: 0; }
-          @page page-2 { size: 198mm 210mm; margin: 0; }
-          @page page-3 { size: 297mm 210mm; margin: 0; }
-          
-          .print-page-1, .preview-page-shell-1 { page: page-1; width: 99mm !important; }
-          .print-page-2, .preview-page-shell-2 { page: page-2; width: 198mm !important; }
-          .print-page-3, .preview-page-shell-3 { page: page-3; width: 297mm !important; }
-
-          html, body, #root, .app-shell, .workspace, .preview-pane, .preview-stage, .print-pages {
-            width: 100% !important;
-            min-width: 100% !important;
-          }
-        }
-      `}</style>
       <MeasurementLayer document={document} rootRef={rootRef} />
       <div className="preview-stage" ref={stageRef}>
         <div className="print-pages" aria-label={COPY.previewTitle}>
-          {pages.map((panels, pageIndex) => {
-            const currentPanels = panels.length || 1
-            const scale = metrics?.scale || 1
-            
-            const baseWidth = metrics?.width || 1
-            const firstPagePanels = pages[0].length || 1
-            const widthPixels = (baseWidth / firstPagePanels) * currentPanels
-            
-            const shellStyle = metrics ? { 
-              width: `${widthPixels * scale}px`, 
-              height: `${metrics.height * scale}px` 
-            } : undefined
-            
-            const pageStyle = metrics ? { 
-              transform: `scale(${scale})`, 
-              gridTemplateColumns: `repeat(${currentPanels}, var(--print-panel-width))`,
-              width: `${currentPanels * 99}mm`
-            } : { 
-              gridTemplateColumns: `repeat(${currentPanels}, var(--print-panel-width))`,
-              width: `${currentPanels * 99}mm`
-            }
+          {pages.map((slots, pageIndex) => (
+            <div className="preview-page-shell" style={shellStyle} key={`page-${pageIndex + 1}`}>
+              <div
+                className="print-page"
+                ref={pageIndex === 0 ? pageRef : undefined}
+                style={pageStyle}
+              >
+                {slots.map((slot, slotIndex) => {
+                  const panelIndex = pageIndex * PANELS_PER_PAGE + slotIndex
+                  const key = `panel-${panelIndex + 1}`
 
-            return (
-              <div className={`preview-page-shell preview-page-shell-${currentPanels}`} style={shellStyle} key={`page-${pageIndex + 1}`}>
-                <div
-                  className={`print-page print-page-${currentPanels}`}
-                  ref={pageIndex === 0 ? pageRef : undefined}
-                  style={pageStyle}
-                >
-                  {panels.map((panel, slotIndex) => {
-                    const panelIndex = pageIndex * 3 + slotIndex
-                    return (
-                      <PrintPanel
-                        key={`panel-${panelIndex + 1}`}
-                        document={document}
-                        lists={panel}
-                        panelIndex={panelIndex}
-                        panelCount={panelCount}
-                        overflowListIds={layout.overflowListIds}
-                      />
-                    )
-                  })}
-                </div>
+                  return slot === null ? (
+                    <FillerPanel key={key} />
+                  ) : (
+                    <PrintPanel
+                      key={key}
+                      document={document}
+                      lists={slot}
+                      panelIndex={panelIndex}
+                      panelCount={panelCount}
+                      overflowListIds={layout.overflowListIds}
+                    />
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
     </>

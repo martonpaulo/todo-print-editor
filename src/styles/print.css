@@ -1,9 +1,15 @@
+/*
+ * One sheet, always the recorded paper. The columns are auto-generated from the panel token rather
+ * than counted here, so the sheet stays A4 whether its trailing slots carry panels or blank
+ * fillers, and no millimetre value is restated outside the print token group.
+ */
 .print-page {
   break-inside: avoid;
   display: grid;
   width: var(--print-page-width);
   height: var(--print-page-height);
-  
+  grid-auto-flow: column;
+  grid-auto-columns: var(--print-panel-width);
   overflow: hidden;
   color: var(--print-ink);
   background: var(--print-paper);
@@ -32,6 +38,15 @@
   height: 100%;
   content: '';
   background: var(--print-ink);
+}
+
+/*
+ * A filler is blank paper, so it carries no divider and neither does the panel before it: a partial
+ * sheet prints no rule beside empty space.
+ */
+.print-page > .print-panel--filler::after,
+.print-page > .print-panel:has(+ .print-panel--filler)::after {
+  content: none;
 }
 
 .print-panel--filler {
@@ -176,7 +191,14 @@
   margin-top: var(--print-list-gap);
 }
 
+/*
+ * The paper the print tokens describe. `size` takes a page-size keyword rather than
+ * `var(--print-page-width)` because custom properties do not cascade into the page context;
+ * tests/print-geometry checks the rendered `/MediaBox` against the recorded contract so the two
+ * cannot drift apart silently.
+ */
 @page {
+  size: A4 landscape;
   margin: 0;
 }
 
