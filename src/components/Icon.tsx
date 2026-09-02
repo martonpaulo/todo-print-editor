@@ -7,6 +7,7 @@ type IconName =
   | 'check'
   | 'code'
   | 'list'
+  | 'moon'
   | 'panel'
   | 'plus'
   | 'printer'
@@ -31,6 +32,9 @@ export const Icon = ({ name, size = 18, ...props }: IconProps) => {
     check: <path d="m5 12 4 4L19 6" />,
     code: <path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" />,
     list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+    // Three Moon primitives — the semicircle of C, the vertical line of I, the angle of A — which
+    // is what the toggle switches the document to.
+    moon: <path d="M7 5a5 5 0 0 0 0 14M12 5v14M16 19l3-14 3 14" />,
     panel: (
       <>
         <rect x="3" y="4" width="18" height="16" rx="2" />

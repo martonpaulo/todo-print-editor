@@ -140,9 +140,46 @@
   line-height: 1.22;
 }
 
+/*
+ * Moon words are inline-block SVGs sized in `em`, so they inherit the surrounding font size and
+ * `currentColor` and therefore scale with the print tokens exactly as Latin text does. Wrapping stays
+ * with the browser: it breaks at the plain whitespace between words.
+ */
+.moon-text,
+.moon-text__glyphs {
+  display: inline;
+}
+
+.moon-word {
+  display: inline-block;
+  /* Round stroke caps reach past the glyph band, and a clipped viewport would shave them off. */
+  overflow: visible;
+  /* The band's bottom edge is the baseline, so no vertical offset is needed. */
+  vertical-align: baseline;
+}
+
 .print-task__text--checked {
   text-decoration: line-through;
   text-decoration-thickness: 0.25mm;
+}
+
+/*
+ * A text decoration is not propagated into atomic inline boxes, and every Moon word is one, so
+ * `line-through` above would strike the spaces and digits between the words and skip the words
+ * themselves (https://www.w3.org/TR/css-text-decor-3/#line-decoration). The strike is painted as a
+ * background on the inline wrapper instead: backgrounds paint once per line fragment, so it follows
+ * wrapping and covers the gaps that the decoration used to cover. It renders behind the glyphs,
+ * which is invisible in monochrome output because both are the same ink.
+ */
+.print-task__text--checked.print-task__text--moon {
+  text-decoration: none;
+}
+
+.print-task__text--checked.print-task__text--moon .moon-text__glyphs {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 50%;
+  background-size: 100% 0.25mm;
 }
 
 .measurement-layer {

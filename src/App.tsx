@@ -24,6 +24,10 @@ const PRINT_HINT_ID = 'print-dialog-hint'
 const EDITOR_REGION_ID = 'editor-region'
 const PREVIEW_REGION_ID = 'preview-region'
 
+// The toggle's own name is only the alphabet's name; what switching it does to the document, and
+// which characters keep their Latin form, is carried in an adjacent description.
+const MOON_HINT_ID = 'moon-typography-hint'
+
 // jsdom, and any environment without a layout engine, leaves scrollIntoView
 // undefined; focus() already scrolls, so the explicit call only refines where
 // the target lands.
@@ -194,7 +198,25 @@ const App = () => {
                 <span>{COPY.panelNumbers}</span>
               </label>
 
-              
+              <label className="toggle-control">
+                <input
+                  type="checkbox"
+                  aria-describedby={MOON_HINT_ID}
+                  checked={document.typography === 'moon'}
+                  onChange={(event) =>
+                    applyDocumentSettings({
+                      ...document,
+                      typography: event.target.checked ? 'moon' : 'latin',
+                    })
+                  }
+                />
+                <span className="toggle-control__track" aria-hidden="true" />
+                <Icon name="moon" size={17} />
+                <span>{COPY.moonTypography}</span>
+              </label>
+              <p className="sr-only" id={MOON_HINT_ID}>
+                {COPY.moonTypographyHint}
+              </p>
 
               <div className="mode-switcher" role="group" aria-label={COPY.editorMode}>
                 <button

@@ -140,6 +140,9 @@ export const reconcileMarkdownDraft = (
   date: draft.date ?? previousDocument.date,
   showDate: draft.date !== null,
   showPanelNumbers: previousDocument.showPanelNumbers,
+  // Moon type is a rendering setting with no Markdown syntax, so it survives a round trip through
+  // the source instead of being serialized into it.
+  typography: previousDocument.typography,
   blocks: draft.blocks.map((block, blockIndex) => {
     const previousBlock = previousDocument.blocks[blockIndex]
 

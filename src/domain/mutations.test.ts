@@ -18,6 +18,7 @@ const buildDocument = (): TodoDocument => ({
   date: '2026-01-01',
   showDate: true,
   showPanelNumbers: true,
+  typography: 'latin',
   blocks: [
     {
       id: 'list-a',

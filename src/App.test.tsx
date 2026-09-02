@@ -157,6 +157,63 @@ describe('App', () => {
     expect(back).toHaveClass('screen-only')
   })
 
+  it('switches the previewed document to Moon type and back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const toggle = screen.getByRole('checkbox', { name: COPY.moonTypography })
+    expect(preview.querySelector('.moon-word')).toBeNull()
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).not.toBeNull()
+    // The glyphs are a visual cipher, so what the document says is unchanged: the Latin text is
+    // still there for assistive technology, and the panel number stays in the normal typeface.
+    expect(preview).toHaveTextContent(COPY.starter.priorities)
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).toBeNull()
+  })
+
+  it('persists the Moon type setting with the document', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.typography).toBe('moon')
+
+    cleanup()
+    render(<App />)
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toBeChecked()
+  })
+
+  it('keeps completed tasks marked as completed in Moon type', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const [task] = screen.getAllByRole('checkbox', { name: /^Mark Task 1/ })
+    await user.click(task)
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    // A CSS text decoration is not propagated into atomic inline boxes, and every Moon word is one,
+    // so the completed state has to be drawn a second way. The stylesheet keys that off this class.
+    const struck = preview.querySelector('.print-task__text--checked')
+    expect(struck).not.toBeNull()
+    expect(struck).toHaveClass('print-task__text--moon')
+    expect(struck!.querySelector('.moon-word')).not.toBeNull()
+  })
+
+  it('describes what the Moon type toggle changes', () => {
+    render(<App />)
+
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toHaveAccessibleDescription(
+      COPY.moonTypographyHint,
+    )
+  })
+
   it('marks the document unsaved when the browser refuses the write, then clears it once a write succeeds', async () => {
     const user = userEvent.setup()
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

@@ -79,6 +79,7 @@ export const createProfileDocument = ({
   date: '2026-01-05',
   showDate: true,
   showPanelNumbers: true,
+  typography: 'latin',
   blocks: Array.from({ length: lists }, (_, listIndex) =>
     createFixtureList(listIndex, tasksPerList),
   ),

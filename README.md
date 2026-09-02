@@ -12,6 +12,7 @@ Design structured todo lists in a visual or Markdown editor, preview atomic `99m
 - Lists automatically move between panels but never split
 - Overflow preflight blocks clipped printouts
 - Optional first-panel date and panel numbering
+- Optional Moon type typography, drawing list content in the 1845 geometric alphabet
 - Browser-only persistence with no account, backend, analytics, or content upload
 - Monochrome design tokens in `src/styles/tokens.css`
 
@@ -60,6 +61,23 @@ The supported subset is deliberately small:
 - A plain `- Item` or `* Item` is accepted as an unchecked item.
 - `---` forces a new panel.
 - Unsupported lines are reported instead of silently discarded.
+
+### Moon type
+
+**Moon type** in the toolbar redraws list titles and task text with the geometric alphabet William
+Moon published in 1845, on screen and in the printed page. It is a visual alternative typography,
+not an accessibility feature: the glyphs are vector outlines, not tactile relief.
+
+- The setting belongs to the document and is saved with it in this browser.
+- Moon type is caseless and defines a glyph for each of the 26 Latin letters. Characters it does not
+  cover — digits, punctuation, accented letters — keep their normal typeface, so dates and
+  quantities stay legible.
+- The editor's own input fields stay in the normal typeface, so the document remains editable.
+- The underlying text is unchanged, so screen readers and copied text still read the Latin original.
+
+The outlines are drawn from the published Grade 1 shape descriptions and are authored in
+`src/domain/moon.ts` rather than loaded from a font, so the repository ships no third-party
+typography asset.
 
 ### Printing
 
