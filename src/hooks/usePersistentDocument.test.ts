@@ -62,6 +62,19 @@ describe('usePersistentDocument', () => {
     expect(storedDocument()).toEqual({ version: 99, blocks: 'broken' })
   })
 
+  it.each([
+    ['an empty string', ''],
+    ['whitespace', '   '],
+  ])('treats %s as unreadable stored content rather than an absent key', (_label, stored) => {
+    window.localStorage.setItem(STORAGE_KEY, stored)
+
+    const { result } = renderHook(() => usePersistentDocument())
+
+    // The mount write must not run here: this value is the user's only copy.
+    expect(result.current.status).toBe('load-failed')
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(stored)
+  })
+
   it('reports a load failure when reading throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('read blocked')

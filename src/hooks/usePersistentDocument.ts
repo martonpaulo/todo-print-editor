@@ -34,8 +34,10 @@ const readDocument = (): DocumentState => {
   }
 
   try {
+    // Only `null` means the key is absent. An empty string is stored content
+    // that happens to be unreadable, and the mount write would destroy it.
     const source = window.localStorage.getItem(STORAGE_KEY)
-    if (!source) return { document: createStarterDocument(), status: 'unwritten' }
+    if (source === null) return { document: createStarterDocument(), status: 'unwritten' }
 
     const document = decodeDocument(JSON.parse(source))
     return document
