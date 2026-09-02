@@ -537,6 +537,63 @@ body,
   padding-left: var(--space-4);
 }
 
+/* Persistence status sits above the document controls, so the first thing the
+   editor says is whether the visible document is the stored one. */
+.storage-status {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6) 0;
+}
+
+.storage-status__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* The failed state is carried by the warning icon and the wording as well as by
+   the weight, so it never depends on color alone. */
+.storage-status__state--failed {
+  color: var(--status-attention);
+  font-weight: 600;
+}
+
+.storage-status__detail {
+  max-width: 44rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.storage-status__recovery {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 44rem;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-primary);
+  background: var(--surface-page);
+  border: var(--border-width-emphasis) solid var(--border-emphasis);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.storage-status__recovery div {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.storage-status__recovery span {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
 .overflow-banner {
   margin: var(--space-5) var(--space-6) 0;
   padding: var(--space-3) var(--space-4);
