@@ -63,6 +63,29 @@ const panelBreakDocument = (
   ]),
 })
 
+/**
+ * A single alphabetic run far wider than the 99 mm panel. Each Moon chunk is an atomic inline box, so
+ * if the run were emitted as one element nothing could wrap it: it would extend past the panel, and
+ * `overflow: visible` on `.print-panel` would paint it across the divider into the next one.
+ */
+const LONG_RUN = 'Supercalifragilistic'.repeat(10)
+
+const longRunDocument = (typography: Typography): TodoDocument => ({
+  version: 1,
+  date: '2026-01-01',
+  showDate: false,
+  showPanelNumbers: false,
+  typography,
+  blocks: [
+    {
+      kind: 'list',
+      id: 'list-long',
+      title: LONG_RUN,
+      items: [{ id: 'item-long', text: LONG_RUN, checked: false }],
+    },
+  ],
+})
+
 interface MeasuredBox {
   widthMm: number
   heightMm: number
@@ -116,6 +139,8 @@ describe('printed page geometry', () => {
   let sheetsAfterRestore: MeasuredSheet[] = []
   let moon: Measurement | null = null
   let moonGlyphsUnderPrintMedia = 0
+  let longRunMoon = { overflowMm: 0, listHeightMm: 0 }
+  let longRunLatin = { overflowMm: 0, listHeightMm: 0 }
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -176,6 +201,48 @@ describe('printed page geometry', () => {
     await page.waitForSelector('.print-page')
   }
 
+  /**
+   * How far the widest rendered content box reaches past its panel's content edge, in millimetres,
+   * and how tall the list ended up. A wrapped run stays inside and grows downwards; an unbreakable
+   * one escapes sideways while staying one line tall.
+   */
+  const measureLongRun = async (): Promise<{ overflowMm: number; listHeightMm: number }> =>
+    page.evaluate(() => {
+      // Scoped to the preview: `.measurement-layer` holds a second copy of every panel and list,
+      // parked at `left: -200vw`, whose rects say nothing about what the sheet will look like.
+      const panel = window.document.querySelector('.preview-stage .print-panel')
+      const list = window.document.querySelector('.preview-stage .print-list')
+      if (!panel || !list) throw new Error('The long-run document rendered no panel')
+
+      const style = window.getComputedStyle(panel)
+      const contentRight =
+        panel.getBoundingClientRect().right - Number.parseFloat(style.paddingRight)
+      const boxes = [...panel.querySelectorAll('.moon-word, .print-list__title, .print-task__text')]
+      const worstRight = boxes.reduce(
+        (worst, box) => Math.max(worst, box.getBoundingClientRect().right),
+        0,
+      )
+
+      return {
+        overflowPx: worstRight - contentRight,
+        listHeightPx: list.getBoundingClientRect().height,
+      }
+    }).then(({ overflowPx, listHeightPx }) => ({
+      overflowMm: pxToMm(overflowPx),
+      listHeightMm: pxToMm(listHeightPx),
+    }))
+
+  const renderLongRun = async (appUrl: string, typography: Typography): Promise<void> => {
+    await page.goto(appUrl, { waitUntil: 'networkidle0' })
+    await page.evaluate(
+      (key: string, document: string) => window.localStorage.setItem(key, document),
+      STORAGE_KEY,
+      JSON.stringify(longRunDocument(typography)),
+    )
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('.print-page')
+  }
+
   const forShape = (panelCount: number): Measurement => {
     const result = measured.get(panelCount)
     if (!result) throw new Error(`No measurement was collected for ${panelCount} panels`)
@@ -223,6 +290,11 @@ describe('printed page geometry', () => {
       await page.emulateMediaType(undefined)
     }
     moon = { sheets: await measureSheets(), paper: await measurePrintedPaper() }
+
+    await renderLongRun(appUrl, 'latin')
+    longRunLatin = await measureLongRun()
+    await renderLongRun(appUrl, 'moon')
+    longRunMoon = await measureLongRun()
   }, 300_000)
 
   afterAll(async () => {
@@ -265,6 +337,19 @@ describe('printed page geometry', () => {
       expect(paper).toHaveLength(sheets.length)
     })
     expect(printMediaSheets.length).toBeGreaterThan(0)
+  })
+
+  it('wraps an alphabetic run wider than the panel instead of letting it escape', () => {
+    // Latin is the reference: `overflow-wrap: anywhere` already keeps it inside the content box.
+    expect(longRunLatin.overflowMm).toBeLessThanOrEqual(0.1)
+    expect(longRunMoon.overflowMm).toBeLessThanOrEqual(0.1)
+  })
+
+  it('turns that run into height pagination can see', () => {
+    // The panel is 99mm wide and the run is far longer, so a wrapped list must be many lines tall.
+    // An unbreakable run would stay one line tall and print without ever tripping the overflow guard.
+    expect(longRunMoon.listHeightMm).toBeGreaterThan(longRunLatin.listHeightMm / 2)
+    expect(longRunMoon.listHeightMm).toBeGreaterThan(20)
   })
 
   it('keeps the printed geometry identical when the document uses Moon typography', () => {

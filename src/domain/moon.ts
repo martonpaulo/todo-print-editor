@@ -168,6 +168,20 @@ export const MOON_LETTERS = Object.keys(MOON_ALPHABET)
 export const getMoonGlyph = (character: string): MoonGlyph | null =>
   MOON_ALPHABET[character.toUpperCase()] ?? null
 
+/**
+ * Longest run of letters emitted as one atomic `<svg>`.
+ *
+ * A whole word in one element has no internal break opportunity, and neither `overflow-wrap` nor
+ * `word-break` can split an atomic inline box. A single long run would then extend past the 99 mm
+ * panel — which `overflow: visible` paints into the neighbouring panel — while pagination, which
+ * measures height alone, still saw one unwrapped line and allowed printing. Chunking bounds how wide
+ * an unbreakable piece can be, so the browser can wrap and the measured height becomes truthful
+ * again. Six glyphs is a small fraction of the narrowest usable column at the smallest print size, so
+ * a chunk always fits; `tests/print-geometry` measures a run far wider than a panel and asserts that
+ * nothing escapes the panel's content box.
+ */
+export const MOON_MAX_RUN_GLYPHS = 6
+
 export interface MoonWordSegment {
   kind: 'moon'
   /** The Latin source of this word, preserved so assistive technology still reads the real text. */
@@ -175,6 +189,11 @@ export interface MoonWordSegment {
   glyphs: MoonGlyph[]
   /** Total width of the word in band units. */
   advance: number
+  /**
+   * True when this chunk continues the previous one rather than starting a new run, so the renderer
+   * can place a zero-width break opportunity between them without adding any width.
+   */
+  continuesRun: boolean
 }
 
 export interface PlainSegment {
@@ -184,7 +203,7 @@ export interface PlainSegment {
 
 export type MoonSegment = MoonWordSegment | PlainSegment
 
-const toWordSegment = (source: string): MoonWordSegment => {
+const toChunk = (source: string, continuesRun: boolean): MoonWordSegment => {
   const glyphs = [...source].map((character) => getMoonGlyph(character)).filter(
     (candidate): candidate is MoonGlyph => candidate !== null,
   )
@@ -193,15 +212,29 @@ const toWordSegment = (source: string): MoonWordSegment => {
     source,
     glyphs,
     advance: glyphs.reduce((total, current) => total + current.advance, 0),
+    continuesRun,
   }
 }
 
+/** Split one run of letters into chunks no wider than `MOON_MAX_RUN_GLYPHS` glyphs. */
+const toWordSegments = (source: string): MoonWordSegment[] => {
+  const characters = [...source]
+  const chunks: MoonWordSegment[] = []
+  for (let index = 0; index < characters.length; index += MOON_MAX_RUN_GLYPHS) {
+    chunks.push(
+      toChunk(characters.slice(index, index + MOON_MAX_RUN_GLYPHS).join(''), index > 0),
+    )
+  }
+  return chunks
+}
+
 /**
- * Split text into runs that Moon can draw and runs it cannot. A run of letters becomes one word
- * segment, drawn as a single `<svg>`; everything else — whitespace, digits, punctuation — stays a
- * plain segment rendered in the surrounding Latin font. That fallback is lossless, so dates and
- * quantities remain legible, and it keeps line breaking with the browser: word segments are
- * inline-block, so wrapping still happens at the plain whitespace between them.
+ * Split text into runs that Moon can draw and runs it cannot. A run of letters becomes one or more
+ * word segments, each drawn as a single `<svg>`; everything else — whitespace, digits, punctuation —
+ * stays a plain segment rendered in the surrounding Latin font. That fallback is lossless, so dates
+ * and quantities remain legible, and it keeps line breaking with the browser: word segments are
+ * inline-block, so wrapping happens at the plain whitespace between words and, for a run longer than
+ * `MOON_MAX_RUN_GLYPHS`, at the zero-width opportunities between its chunks.
  */
 export const toMoonSegments = (text: string): MoonSegment[] => {
   const segments: MoonSegment[] = []
@@ -210,7 +243,8 @@ export const toMoonSegments = (text: string): MoonSegment[] => {
 
   const flush = () => {
     if (!buffer) return
-    segments.push(bufferIsMoon ? toWordSegment(buffer) : { kind: 'plain', text: buffer })
+    if (bufferIsMoon) segments.push(...toWordSegments(buffer))
+    else segments.push({ kind: 'plain', text: buffer })
     buffer = ''
   }
 

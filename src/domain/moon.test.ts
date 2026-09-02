@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOON_LETTERS, getMoonGlyph, toMoonSegments } from './moon.ts'
+import { MOON_LETTERS, MOON_MAX_RUN_GLYPHS, getMoonGlyph, toMoonSegments } from './moon.ts'
 
 const LATIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
@@ -84,5 +84,54 @@ describe('toMoonSegments', () => {
 
   it('returns nothing for empty text', () => {
     expect(toMoonSegments('')).toEqual([])
+  })
+
+  // An `<svg>` is an atomic inline box that no CSS wrapping property can split, so a whole run in one
+  // element would run past the panel while pagination, which measures height, saw one unwrapped line
+  // and still allowed printing. Bounded chunks are what restore both the wrap and the measurement.
+  describe('bounded break opportunities', () => {
+    const longRun = 'A'.repeat(MOON_MAX_RUN_GLYPHS * 4 + 3)
+
+    it('never emits a chunk wider than the bound', () => {
+      for (const segment of toMoonSegments(`${longRun} ${longRun}`)) {
+        if (segment.kind === 'moon') {
+          expect(segment.glyphs.length).toBeLessThanOrEqual(MOON_MAX_RUN_GLYPHS)
+        }
+      }
+    })
+
+    it('splits a long run into chunks that reconstruct it exactly', () => {
+      const chunks = toMoonSegments(longRun)
+
+      expect(chunks).toHaveLength(Math.ceil(longRun.length / MOON_MAX_RUN_GLYPHS))
+      expect(chunks.map((segment) => (segment.kind === 'moon' ? segment.source : '')).join('')).toBe(
+        longRun,
+      )
+    })
+
+    it('marks every chunk after the first as continuing its run', () => {
+      const chunks = toMoonSegments(longRun)
+
+      expect(chunks.map((segment) => segment.kind === 'moon' && segment.continuesRun)).toEqual([
+        false,
+        ...Array(chunks.length - 1).fill(true),
+      ])
+    })
+
+    it('leaves a word within the bound as one unbroken chunk', () => {
+      const short = 'A'.repeat(MOON_MAX_RUN_GLYPHS)
+      const chunks = toMoonSegments(short)
+
+      expect(chunks).toHaveLength(1)
+      expect(chunks[0].kind === 'moon' && chunks[0].continuesRun).toBe(false)
+    })
+
+    it('starts a fresh run after unmapped characters', () => {
+      expect(
+        toMoonSegments('ab 12 cd').map((segment) =>
+          segment.kind === 'moon' ? segment.continuesRun : 'plain',
+        ),
+      ).toEqual([false, 'plain', false])
+    })
   })
 })

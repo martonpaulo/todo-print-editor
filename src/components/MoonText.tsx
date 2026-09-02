@@ -13,10 +13,18 @@ import {
 const CAP_HEIGHT_EM = 0.74
 
 /**
- * One `<svg>` per word rather than per character or per whole run: a per-character element multiplies
- * DOM nodes on the measured editing hot path (see `docs/performance.md`), and a per-run element would
- * have to reimplement line breaking inside the fixed 99 mm panel. Per word, the browser still wraps at
- * the plain whitespace between the inline-block words.
+ * Zero-width space. An `<svg>` is an atomic inline box, so no `overflow-wrap` or `word-break` value
+ * can split one; between two of them, this is what gives the browser somewhere to wrap. It adds no
+ * width, so a run that fits is laid out exactly as if it were one element.
+ */
+const BREAK_OPPORTUNITY = '\u200b'
+
+/**
+ * One `<svg>` per word — bounded by `MOON_MAX_RUN_GLYPHS` — rather than per character or per whole
+ * run: a per-character element multiplies DOM nodes on the measured editing hot path (see
+ * `docs/performance.md`), and a per-run element would have to reimplement line breaking inside the
+ * fixed 99 mm panel. The browser wraps at the plain whitespace between words, and inside a long run
+ * at the zero-width opportunities between its chunks.
  */
 const MoonWord = ({ segment }: { segment: MoonWordSegment }) => {
   const width = (segment.advance / MOON_BAND_HEIGHT) * CAP_HEIGHT_EM
@@ -65,7 +73,10 @@ export const MoonText = memo(({ text }: { text: string }) => (
     <span aria-hidden="true" className="moon-text__glyphs">
       {toMoonSegments(text).map((segment, index) =>
         segment.kind === 'moon' ? (
-          <MoonWord key={index} segment={segment} />
+          <Fragment key={index}>
+            {segment.continuesRun && BREAK_OPPORTUNITY}
+            <MoonWord segment={segment} />
+          </Fragment>
         ) : (
           <Fragment key={index}>{segment.text}</Fragment>
         ),
