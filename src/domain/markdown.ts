@@ -50,6 +50,15 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
   let currentList: MarkdownDraftList | null = null
   let hasDateHeading = false
 
+  const appendItem = (item: MarkdownDraftItem) => {
+    if (!currentList) {
+      currentList = { kind: 'list', title: '', items: [] }
+      draft.blocks.push(currentList)
+    }
+
+    currentList.items.push(item)
+  }
+
   source.split(/\r?\n/).forEach((rawLine, index) => {
     const lineNumber = index + 1
     const line = rawLine.trim()
@@ -93,24 +102,16 @@ export const parseMarkdownDraft = (source: string): MarkdownDraftParseResult => 
 
     const checklistMatch = line.match(CHECKLIST_PATTERN)
     if (checklistMatch) {
-      if (!currentList) {
-        errors.push({ line: lineNumber, code: 'task-without-list' })
-      } else {
-        currentList.items.push({
-          text: checklistMatch[2],
-          checked: checklistMatch[1].toLowerCase() === 'x',
-        })
-      }
+      appendItem({
+        text: checklistMatch[2],
+        checked: checklistMatch[1].toLowerCase() === 'x',
+      })
       return
     }
 
     const bulletMatch = line.match(BULLET_PATTERN)
     if (bulletMatch && !/^\[[^\]]*\]/.test(bulletMatch[1])) {
-      if (!currentList) {
-        errors.push({ line: lineNumber, code: 'task-without-list' })
-      } else {
-        currentList.items.push({ text: bulletMatch[1], checked: false })
-      }
+      appendItem({ text: bulletMatch[1], checked: false })
       return
     }
 
@@ -239,20 +240,25 @@ export const continueMarkdownAtSelection = (
 
 export const serializeMarkdown = (document: TodoDocument): string => {
   const sections: string[] = []
+  let hasListInPanel = false
 
   if (document.showDate) sections.push(`# ${document.date}`)
 
   document.blocks.forEach((block) => {
     if (block.kind === 'panel-break') {
       sections.push('---')
+      hasListInPanel = false
       return
     }
 
-    const lines = [`## ${block.title}`]
+    const hasTitle = block.title.trim() !== ''
+    const canUseBareTasks = !hasTitle && !hasListInPanel && block.items.length > 0
+    const lines = canUseBareTasks ? [] : [hasTitle ? `## ${block.title}` : '##']
     block.items.forEach((item) => {
       lines.push(`- [${item.checked ? 'x' : ' '}] ${item.text}`)
     })
     sections.push(lines.join('\n'))
+    hasListInPanel = true
   })
 
   return sections.join('\n\n')

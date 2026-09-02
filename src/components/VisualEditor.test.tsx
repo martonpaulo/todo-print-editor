@@ -115,6 +115,24 @@ describe('VisualEditor accessible names', () => {
     expect(renamed).toHaveFocus()
     expect(renamed).toBe(title)
   })
+
+  it('creates a list with an empty title and a positional accessible name', async () => {
+    const user = userEvent.setup()
+    const document = buildDocument()
+    const onChange = vi.fn()
+    const { rerender } = render(
+      <VisualEditor document={document} overflowListIds={[]} onChange={onChange} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: COPY.addList }))
+
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    expect(next.blocks.at(-1)).toMatchObject({ kind: 'list', title: '' })
+
+    rerender(<VisualEditor document={next} overflowListIds={[]} onChange={onChange} />)
+    expect(screen.getByRole('region', { name: 'List 4' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Title of List 4' })).toHaveValue('')
+  })
 })
 
 describe('VisualEditor checkbox target', () => {

@@ -76,10 +76,14 @@ const DocumentText = ({ text, typography }: { text: string; typography: Typograp
  */
 const PrintList = memo(({ list, typography, overflowing = false }: PrintListProps) => (
   <section className={`print-list${overflowing ? ' print-list--overflow' : ''}`}>
-    <h2 className="print-list__title">
-      <DocumentText text={list.title || COPY.untitledList} typography={typography} />
-    </h2>
-    <div className="print-list__rule" />
+    {list.title.trim() !== '' && (
+      <>
+        <h2 className="print-list__title">
+          <DocumentText text={list.title} typography={typography} />
+        </h2>
+        <div className="print-list__rule" />
+      </>
+    )}
     <div className="print-task-grid">
       {list.items.map((item) => (
         <div className="print-task" key={item.id}>
