@@ -14,6 +14,7 @@ const documentOfPanels = (panelCount: number): TodoDocument => ({
   date: '2026-01-01',
   showDate: true,
   showPanelNumbers: true,
+  typography: 'latin',
   blocks: Array.from({ length: panelCount }, (_, index) => index).flatMap<DocumentBlock>((index) => [
     ...(index === 0 ? [] : [{ kind: 'panel-break' as const, id: `break-${index}` }]),
     {

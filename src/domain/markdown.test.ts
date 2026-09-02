@@ -15,6 +15,7 @@ const baseDocument: TodoDocument = {
   date: '2026-08-24',
   showDate: false,
   showPanelNumbers: true,
+  typography: 'latin',
   blocks: [],
 }
 
@@ -197,6 +198,15 @@ describe('Markdown document conversion', () => {
       { id: 'break-stable', kind: 'panel-break' },
     ])
   })
+
+  // Moon type has no Markdown syntax, so switching editor modes must not silently reset it.
+  it('carries the typography setting through a Markdown round trip', () => {
+    const moonDocument: TodoDocument = { ...baseDocument, typography: 'moon' }
+    const result = parseMarkdown(serializeMarkdown(moonDocument), moonDocument)
+
+    expect(result.errors).toEqual([])
+    expect(result.document.typography).toBe('moon')
+  })
 })
 
 describe('Markdown draft parsing and identity reconciliation', () => {
@@ -205,6 +215,7 @@ describe('Markdown draft parsing and identity reconciliation', () => {
     date: '2026-08-23',
     showDate: true,
     showPanelNumbers: false,
+    typography: 'latin',
     blocks: [
       {
         id: 'list-1',
@@ -265,6 +276,7 @@ describe('Markdown draft parsing and identity reconciliation', () => {
       date: '2026-08-23',
       showDate: false,
       showPanelNumbers: false,
+      typography: 'latin',
       blocks: [
         {
           id: 'list-1',

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import puppeteer, { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
-import type { TodoDocument } from '../../src/domain/types'
+import type { TodoDocument, Typography } from '../../src/domain/types'
 import { readPrintContract, readPrintPanelClamp } from './contract'
 
 const contract = readPrintContract()
@@ -44,11 +44,15 @@ const PANEL_COUNTS = [1, 2, contract.panelsPerPage, contract.panelsPerPage + 1]
  * Panel breaks, not text volume, decide the panel count here. The geometry under test is physical,
  * so nothing in this document may depend on how a font happens to render on the running machine.
  */
-const panelBreakDocument = (panelCount: number): TodoDocument => ({
+const panelBreakDocument = (
+  panelCount: number,
+  typography: Typography = 'latin',
+): TodoDocument => ({
   version: 1,
   date: '2026-01-01',
   showDate: true,
   showPanelNumbers: true,
+  typography,
   blocks: Array.from({ length: panelCount }, (_, index) => index).flatMap((index) => [
     ...(index === 0 ? [] : ([{ kind: 'panel-break', id: `break-${index}` }] as const)),
     {
@@ -58,6 +62,45 @@ const panelBreakDocument = (panelCount: number): TodoDocument => ({
       items: [{ id: `item-${index + 1}`, text: 'A task', checked: false }],
     } as const,
   ]),
+})
+
+/**
+ * A single alphabetic run far wider than the 99 mm panel. Each Moon chunk is an atomic inline box, so
+ * if the run were emitted as one element nothing could wrap it: it would extend past the panel, and
+ * `overflow: visible` on `.print-panel` would paint it across the divider into the next one.
+ */
+const LONG_RUN = 'Supercalifragilistic'.repeat(10)
+
+const checkedTaskDocument = (typography: Typography): TodoDocument => ({
+  version: 1,
+  date: '2026-01-01',
+  showDate: false,
+  showPanelNumbers: false,
+  typography,
+  blocks: [
+    {
+      kind: 'list',
+      id: 'list-checked',
+      title: 'Done',
+      items: [{ id: 'item-checked', text: 'Buy milk today', checked: true }],
+    },
+  ],
+})
+
+const longRunDocument = (typography: Typography): TodoDocument => ({
+  version: 1,
+  date: '2026-01-01',
+  showDate: false,
+  showPanelNumbers: false,
+  typography,
+  blocks: [
+    {
+      kind: 'list',
+      id: 'list-long',
+      title: LONG_RUN,
+      items: [{ id: 'item-long', text: LONG_RUN, checked: false }],
+    },
+  ],
 })
 
 interface MeasuredBox {
@@ -111,6 +154,12 @@ describe('printed page geometry', () => {
   const measured = new Map<number, Measurement>()
   let printMediaSheets: MeasuredSheet[] = []
   let sheetsAfterRestore: MeasuredSheet[] = []
+  let moon: Measurement | null = null
+  let moonGlyphsUnderPrintMedia = 0
+  let longRunMoon = { overflowMm: 0, listHeightMm: 0 }
+  let longRunLatin = { overflowMm: 0, listHeightMm: 0 }
+  let latinStrike = { decoration: '', paintedMm: 0 }
+  let moonStrike = { decoration: '', paintedMm: 0 }
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -176,16 +225,85 @@ describe('printed page geometry', () => {
     return boxes
   }
 
-  const render = async (appUrl: string, panelCount: number): Promise<void> => {
+  const render = async (
+    appUrl: string,
+    panelCount: number,
+    typography: Typography = 'latin',
+  ): Promise<void> => {
     await page.goto(appUrl, { waitUntil: 'networkidle0' })
     await page.evaluate(
       (key: string, document: string) => window.localStorage.setItem(key, document),
       STORAGE_KEY,
-      JSON.stringify(panelBreakDocument(panelCount)),
+      JSON.stringify(panelBreakDocument(panelCount, typography)),
     )
     await page.reload({ waitUntil: 'networkidle0' })
     await page.waitForSelector('.print-page')
   }
+
+  /**
+   * How far the widest rendered content box reaches past its panel's content edge, in millimetres,
+   * and how tall the list ended up. A wrapped run stays inside and grows downwards; an unbreakable
+   * one escapes sideways while staying one line tall.
+   */
+  const measureLongRun = async (): Promise<{ overflowMm: number; listHeightMm: number }> =>
+    page.evaluate(() => {
+      // Scoped to the preview: `.measurement-layer` holds a second copy of every panel and list,
+      // parked at `left: -200vw`, whose rects say nothing about what the sheet will look like.
+      const panel = window.document.querySelector('.preview-stage .print-panel')
+      const list = window.document.querySelector('.preview-stage .print-list')
+      if (!panel || !list) throw new Error('The long-run document rendered no panel')
+
+      const style = window.getComputedStyle(panel)
+      const contentRight =
+        panel.getBoundingClientRect().right - Number.parseFloat(style.paddingRight)
+      const boxes = [...panel.querySelectorAll('.moon-word, .print-list__title, .print-task__text')]
+      const worstRight = boxes.reduce(
+        (worst, box) => Math.max(worst, box.getBoundingClientRect().right),
+        0,
+      )
+
+      return {
+        overflowPx: worstRight - contentRight,
+        listHeightPx: list.getBoundingClientRect().height,
+      }
+    }).then(({ overflowPx, listHeightPx }) => ({
+      overflowMm: pxToMm(overflowPx),
+      listHeightMm: pxToMm(listHeightPx),
+    }))
+
+  const renderDocument = async (appUrl: string, document: TodoDocument): Promise<void> => {
+    await page.goto(appUrl, { waitUntil: 'networkidle0' })
+    await page.evaluate(
+      (key: string, value: string) => window.localStorage.setItem(key, value),
+      STORAGE_KEY,
+      JSON.stringify(document),
+    )
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('.print-page')
+  }
+
+  /**
+   * How a completed task is struck through: the text decoration the stylesheet applies, and the
+   * height of any background the strike is painted with instead. A decoration is not propagated into
+   * atomic inline boxes, so in Moon mode the first is inert and only the second reaches the words.
+   */
+  const measureStrike = async (): Promise<{ decoration: string; paintedMm: number }> =>
+    page
+      .evaluate(() => {
+        const text = window.document.querySelector('.preview-stage .print-task__text--checked')
+        if (!text) throw new Error('The checked-task document rendered no completed task')
+        const painted = text.querySelector('.moon-text__glyphs') ?? text
+
+        const textStyle = window.getComputedStyle(text)
+        const paintedStyle = window.getComputedStyle(painted)
+        const [, height = '0px'] = paintedStyle.backgroundSize.split(' ')
+
+        return {
+          decoration: textStyle.textDecorationLine,
+          paintedPx: paintedStyle.backgroundImage === 'none' ? 0 : Number.parseFloat(height),
+        }
+      })
+      .then(({ decoration, paintedPx }) => ({ decoration, paintedMm: pxToMm(paintedPx) }))
 
   const forShape = (panelCount: number): Measurement => {
     const result = measured.get(panelCount)
@@ -220,6 +338,30 @@ describe('printed page geometry', () => {
       await page.emulateMediaType(undefined)
     }
     sheetsAfterRestore = await measureSheets()
+
+    // The Moon typography setting replaces list content with SVG glyphs. Measuring the same
+    // document shape with it on is what proves the physical contract is a property of the layout
+    // rather than of the typeface the content happens to use.
+    await render(appUrl, contract.panelsPerPage, 'moon')
+    await page.emulateMediaType('print')
+    try {
+      moonGlyphsUnderPrintMedia = await page.evaluate(
+        () => window.document.querySelectorAll('.print-panel .moon-word').length,
+      )
+    } finally {
+      await page.emulateMediaType(undefined)
+    }
+    moon = { sheets: await measureSheets(), paper: await measurePrintedPaper() }
+
+    await renderDocument(appUrl, longRunDocument('latin'))
+    longRunLatin = await measureLongRun()
+    await renderDocument(appUrl, longRunDocument('moon'))
+    longRunMoon = await measureLongRun()
+
+    await renderDocument(appUrl, checkedTaskDocument('latin'))
+    latinStrike = await measureStrike()
+    await renderDocument(appUrl, checkedTaskDocument('moon'))
+    moonStrike = await measureStrike()
   }, 300_000)
 
   afterAll(async () => {
@@ -262,6 +404,48 @@ describe('printed page geometry', () => {
       expect(paper).toHaveLength(sheets.length)
     })
     expect(printMediaSheets.length).toBeGreaterThan(0)
+  })
+
+  it('wraps an alphabetic run wider than the panel instead of letting it escape', () => {
+    // Latin is the reference: `overflow-wrap: anywhere` already keeps it inside the content box.
+    expect(longRunLatin.overflowMm).toBeLessThanOrEqual(0.1)
+    expect(longRunMoon.overflowMm).toBeLessThanOrEqual(0.1)
+  })
+
+  it('turns that run into height pagination can see', () => {
+    // The panel is 99mm wide and the run is far longer, so a wrapped list must be many lines tall.
+    // An unbreakable run would stay one line tall and print without ever tripping the overflow guard.
+    expect(longRunMoon.listHeightMm).toBeGreaterThan(longRunLatin.listHeightMm / 2)
+    expect(longRunMoon.listHeightMm).toBeGreaterThan(20)
+  })
+
+  it('strikes a completed task through in both typographies', () => {
+    // Latin relies on the text decoration, which is all it needs.
+    expect(latinStrike.decoration).toBe('line-through')
+
+    // Moon cannot: CSS text decorations do not decorate atomic inline boxes, and every Moon word is
+    // one (https://www.w3.org/TR/css-text-decor-3/#line-decoration), so a `line-through` here would
+    // strike the spaces between the words and skip the words themselves. The strike has to be
+    // painted, and this asserts that something paints it.
+    expect(moonStrike.paintedMm).toBeGreaterThan(0)
+    expect(moonStrike.decoration).toBe('none')
+  })
+
+  it('keeps the printed geometry identical when the document uses Moon typography', () => {
+    const measuredMoon = moon
+    if (!measuredMoon) throw new Error('No Moon-typography measurement was collected')
+    const latin = forShape(contract.panelsPerPage)
+
+    expectUnscaled(measuredMoon.sheets)
+    expectSequentialPanels(measuredMoon.sheets)
+    expect(measuredMoon.sheets).toEqual(latin.sheets)
+    expect(measuredMoon.paper).toEqual(latin.paper)
+  })
+
+  it('keeps the Moon glyphs in the panels the printer receives', () => {
+    // The print stylesheet hides the editor and the measurement layer; the glyphs are document
+    // content, so they have to survive into the printed panels.
+    expect(moonGlyphsUnderPrintMedia).toBeGreaterThan(0)
   })
 
   it('renders one sheet of sequential panels at the recorded millimetre sizes', () => {

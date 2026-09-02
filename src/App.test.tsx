@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { COPY } from './copy'
+import { STORAGE_KEY } from './hooks/usePersistentDocument'
 
 // jsdom reports every box as zero, so the layout never finishes measuring and the
 // print action would keep its preparing label. Measured lists taller than a panel
@@ -154,6 +155,347 @@ describe('App', () => {
     expect(back).toHaveClass('narrow-only')
     // It lives in the preview pane, so it also has to stay out of print output.
     expect(back).toHaveClass('screen-only')
+  })
+
+  it('switches the previewed document to Moon type and back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const toggle = screen.getByRole('checkbox', { name: COPY.moonTypography })
+    expect(preview.querySelector('.moon-word')).toBeNull()
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).not.toBeNull()
+    // The glyphs are a visual cipher, so what the document says is unchanged: the Latin text is
+    // still there for assistive technology, and the panel number stays in the normal typeface.
+    expect(preview).toHaveTextContent(COPY.starter.priorities)
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).toBeNull()
+  })
+
+  it('persists the Moon type setting with the document', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.typography).toBe('moon')
+
+    cleanup()
+    render(<App />)
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toBeChecked()
+  })
+
+  it('keeps completed tasks marked as completed in Moon type', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const [task] = screen.getAllByRole('checkbox', { name: /^Mark Task 1/ })
+    await user.click(task)
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    // A CSS text decoration is not propagated into atomic inline boxes, and every Moon word is one,
+    // so the completed state has to be drawn a second way. The stylesheet keys that off this class.
+    const struck = preview.querySelector('.print-task__text--checked')
+    expect(struck).not.toBeNull()
+    expect(struck).toHaveClass('print-task__text--moon')
+    expect(struck!.querySelector('.moon-word')).not.toBeNull()
+  })
+
+  it('describes what the Moon type toggle changes', () => {
+    render(<App />)
+
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toHaveAccessibleDescription(
+      COPY.moonTypographyHint,
+    )
+  })
+
+  it('marks the document unsaved when the browser refuses the write, then clears it once a write succeeds', async () => {
+    const user = userEvent.setup()
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+
+    render(<App />)
+
+    const title = screen.getByRole('textbox', { name: `Title of List 1: ${COPY.starter.priorities}` })
+    await user.type(title, '!')
+
+    // The edit is still on screen, and the status says it is not stored.
+    expect(title).toHaveValue(`${COPY.starter.priorities}!`)
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.saveFailedDescription)).toBeInTheDocument()
+
+    setItem.mockRestore()
+    await user.type(title, '?')
+
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(screen.queryByText(COPY.saveFailedDescription)).not.toBeInTheDocument()
+  })
+
+  it('keeps unreadable stored content until the user replaces it explicitly', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(STORAGE_KEY, '{ not a document')
+
+    render(<App />)
+
+    // The preview's overflow banner is also an alert, so the recovery region is
+    // addressed by its own name.
+    expect(screen.getByRole('alert', { name: COPY.loadFailedTitle })).toHaveTextContent(
+      COPY.loadFailedDescription,
+    )
+
+    // Editing continues, but the unreadable value is the user's only stored copy.
+    const title = screen.getByRole('textbox', { name: `Title of List 1: ${COPY.starter.priorities}` })
+    await user.type(title, '!')
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('{ not a document')
+
+    await user.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+
+    expect(
+      screen.queryByRole('alert', { name: COPY.loadFailedTitle }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).blocks[0].title).toBe(
+      `${COPY.starter.priorities}!`,
+    )
+  })
+
+  it('stops claiming a save while an invalid Markdown draft is unparsed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: COPY.markdownMode }))
+    const source = screen.getByRole('textbox', { name: COPY.markdownLabel })
+    await user.type(source, '\n# not-a-date')
+
+    // The draft never reached the document, so storage cannot hold it.
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.draftNotSavedDescription)).toBeInTheDocument()
+
+    // Removing the invalid line lets the document accept the source again.
+    await user.clear(source)
+    await user.type(source, '## Kept list')
+
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(screen.queryByText(COPY.draftNotSavedDescription)).not.toBeInTheDocument()
+  })
+
+  it('recovers a removed task through the visible Undo action', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    expect(
+      screen.queryByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).not.toBeInTheDocument()
+
+    // The status names what was removed, and the recovery action sits with it
+    // rather than only behind a keyboard shortcut.
+    const undoAction = screen.getByRole('button', { name: COPY.undoRemoval })
+    expect(screen.getByText(COPY.removedTask(taskContext))).toBeInTheDocument()
+
+    // A pointer or touch user reaches the same control every keyboard user does.
+    undoAction.focus()
+    expect(undoAction).toHaveFocus()
+
+    await user.click(undoAction)
+
+    expect(
+      screen.getByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).toBeInTheDocument()
+    // The action disappears with the removal it reversed, so focus lands on the
+    // region the restored task is inside of instead of on the document body.
+    expect(screen.queryByRole('button', { name: COPY.undoRemoval })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: COPY.editorRegion })).toHaveFocus()
+  })
+
+  it('reverses only the removal it names, not the edit just before it', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const secondTask = screen.getByRole('textbox', {
+      name: `${COPY.taskContext(2, COPY.starter.priorityItems[1])} in ${listContext}`,
+    })
+    await user.type(secondTask, '!')
+
+    // The removal follows the rename immediately, well inside the coalescing
+    // window. The status names one task, so its Undo must restore that task
+    // without discarding the text typed a moment earlier.
+    const removedTask = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(removedTask, listContext) }),
+    )
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    expect(
+      screen.getByRole('textbox', { name: `${removedTask} in ${listContext}` }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', {
+        name: `${COPY.taskContext(2, `${COPY.starter.priorityItems[1]}!`)} in ${listContext}`,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('restores one task per undo when two removals follow each other', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    // Tasks are named from their current position, so removing the first one
+    // renumbers the second before it is removed in turn.
+    const taskName = (position: number, text: string) =>
+      `${COPY.taskContext(position, text)} in ${listContext}`
+
+    await user.click(
+      screen.getByRole('button', {
+        name: COPY.removeTaskLabel(
+          COPY.taskContext(1, COPY.starter.priorityItems[0]),
+          listContext,
+        ),
+      }),
+    )
+    await user.click(
+      screen.getByRole('button', {
+        name: COPY.removeTaskLabel(
+          COPY.taskContext(1, COPY.starter.priorityItems[1]),
+          listContext,
+        ),
+      }),
+    )
+
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    // Only the removal the status named comes back; the first one stays undone.
+    expect(
+      screen.getByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[1]) }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[0]) }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(
+      screen.getByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[0]) }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: taskName(2, COPY.starter.priorityItems[1]) }),
+    ).toBeInTheDocument()
+  })
+
+  it('recovers a removed list through the same visible action', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    await user.click(screen.getByRole('button', { name: COPY.removeListLabel(listContext) }))
+
+    expect(screen.getByText(COPY.removedList(listContext))).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    expect(screen.getByRole('region', { name: listContext })).toBeInTheDocument()
+  })
+
+  it('undoes and redoes a removal from the keyboard outside a text field', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    const taskName = `${taskContext} in ${listContext}`
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    // A delayed undo must still work, and must leave the reverted document
+    // available to redo rather than consuming its own branch.
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true, shiftKey: true })
+    expect(screen.queryByRole('textbox', { name: taskName })).not.toBeInTheDocument()
+
+    // The redone document is not a new edit, so one more undo returns to the
+    // task rather than repeating the same step.
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+  })
+
+  it('leaves the shortcut to the browser while a text field is being edited', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    const remainingTask = screen.getByRole('textbox', {
+      name: `${COPY.taskContext(1, COPY.starter.priorityItems[1])} in ${listContext}`,
+    })
+    fireEvent.keyDown(remainingTask, { key: 'z', ctrlKey: true })
+
+    // Native input undo owns the field; the document-level history stays put.
+    expect(
+      screen.queryByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('abandons the redo branch when an edit follows an undo', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    const taskName = `${taskContext} in ${listContext}`
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    // A divergent edit made immediately after the undo, inside the coalescing
+    // window, must not leave the abandoned removal reachable through redo.
+    await user.click(screen.getByRole('button', { name: COPY.addTaskLabel(listContext) }))
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true, shiftKey: true })
+
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+  })
+
+  it('restores a valid stored document without any recovery prompt', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        date: '2026-08-24',
+        showDate: true,
+        showPanelNumbers: true,
+        blocks: [
+          { id: 'list-1', kind: 'list', title: 'Restored', items: [] },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(
+      screen.queryByRole('alert', { name: COPY.loadFailedTitle }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(
+      screen.getByRole('textbox', { name: 'Title of List 1: Restored' }),
+    ).toHaveValue('Restored')
   })
 
 })

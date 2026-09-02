@@ -12,13 +12,14 @@ import {
   updateListTitle,
 } from '../domain/mutations'
 import type { TodoDocument } from '../domain/types'
+import type { DocumentEdit } from '../hooks/usePersistentDocument'
 import { Icon } from './Icon'
 import { listCardId, listOverflowNoteId } from './elementIds'
 
 interface VisualEditorProps {
   document: TodoDocument
   overflowListIds: string[]
-  onChange: (document: TodoDocument) => void
+  onChange: (document: TodoDocument, edit?: DocumentEdit) => void
 }
 
 const focusElement = (elementId: string) => {
@@ -36,10 +37,13 @@ export const VisualEditor = ({
 }: VisualEditorProps) => {
   // The domain owns the document rules; this component decides which rule an
   // event means, where focus lands afterwards, and suppresses a change that
-  // rewrote nothing so the document history records only real edits.
-  const apply = (next: TodoDocument) => {
+  // rewrote nothing so the document history records only real edits. A
+  // destructive rule also names what it removed, so the recovery affordance is
+  // built from the same context string as the control's accessible name; this
+  // component keeps no deletion buffer of its own.
+  const apply = (next: TodoDocument, edit?: DocumentEdit) => {
     if (next === document) return
-    onChange(next)
+    onChange(next, edit)
   }
 
   const addItemAfter = (listId: string, itemId?: string) => {
@@ -48,8 +52,8 @@ export const VisualEditor = ({
     focusItem(item.id)
   }
 
-  const deleteItem = (listId: string, itemId: string, focusId?: string) => {
-    apply(removeItem(document, listId, itemId))
+  const deleteItem = (listId: string, itemId: string, subject: string, focusId?: string) => {
+    apply(removeItem(document, listId, itemId), { kind: 'task-removed', subject })
     focusElement(focusId ? `item-${focusId}` : `add-task-${listId}`)
   }
 
@@ -78,7 +82,9 @@ export const VisualEditor = ({
                     type="button"
                     aria-label={COPY.removePanelBreak}
                     title={COPY.removePanelBreak}
-                    onClick={() => apply(removeBlock(document, block.id))}
+                    onClick={() =>
+                      apply(removeBlock(document, block.id), { kind: 'panel-break-removed' })
+                    }
                   >
                     <Icon name="trash" size={16} />
                   </button>
@@ -132,7 +138,12 @@ export const VisualEditor = ({
                     type="button"
                     aria-label={COPY.removeListLabel(listContext)}
                     title={COPY.removeList}
-                    onClick={() => apply(removeBlock(document, block.id))}
+                    onClick={() =>
+                      apply(removeBlock(document, block.id), {
+                        kind: 'list-removed',
+                        subject: listContext,
+                      })
+                    }
                   >
                     <Icon name="trash" size={16} />
                   </button>
@@ -203,6 +214,7 @@ export const VisualEditor = ({
                             deleteItem(
                               block.id,
                               item.id,
+                              taskContext,
                               block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
                             )
                           }
@@ -217,6 +229,7 @@ export const VisualEditor = ({
                           deleteItem(
                             block.id,
                             item.id,
+                            taskContext,
                             block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
                           )
                         }

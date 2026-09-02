@@ -18,11 +18,19 @@ export interface PanelBreakBlock {
 
 export type DocumentBlock = ListBlock | PanelBreakBlock
 
+/**
+ * How rendered document content is drawn. `moon` replaces list titles and task text with the
+ * geometric Moon type glyphs owned by `domain/moon.ts`; the editor's own inputs stay Latin so the
+ * document remains editable.
+ */
+export type Typography = 'latin' | 'moon'
+
 export interface TodoDocument {
   version: 1
   date: string
   showDate: boolean
   showPanelNumbers: boolean
+  typography: Typography
   blocks: DocumentBlock[]
 }
 

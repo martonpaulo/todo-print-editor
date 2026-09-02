@@ -13,7 +13,22 @@ export const COPY = {
   appTagline: 'A calm workspace for paper plans.',
   localBadge: 'Local · private',
   savedLocally: 'Saved in this browser',
-  saveFailed: 'Could not save in this browser',
+  saveFailed: 'Not saved in this browser',
+  // A failed write leaves the only copy of the work in this tab, so the guidance
+  // names the two actions that keep it: do not close the tab, and take the
+  // Markdown out of the app.
+  saveFailedDescription:
+    'This browser refused to store your document. Keep this tab open, and copy your work from the Markdown view before closing it.',
+  // An invalid Markdown source is never parsed into the document, so what is on
+  // screen is newer than what is stored even though nothing failed.
+  draftNotSavedDescription:
+    'The Markdown source has errors, so this draft is not stored. Fix the errors, or copy the source, before closing the tab.',
+  loadFailedTitle: 'Could not read your saved document',
+  // The unreadable value is still the user's only stored copy, so the message
+  // says both that nothing is being saved and that nothing has been destroyed.
+  loadFailedDescription:
+    'The document stored in this browser is unreadable, so a starter document is shown instead. Nothing is being saved, and the stored content is kept until you replace it. Copy this draft from the Markdown view first if you want to keep it.',
+  replaceStoredDocument: 'Replace the stored document',
   visualMode: 'Visual',
   markdownMode: 'Markdown',
   editorMode: 'Editor mode',
@@ -21,6 +36,9 @@ export const COPY = {
   firstPanelDate: 'Date on first panel',
   chooseDate: 'Choose document date',
   panelNumbers: 'Panel numbers',
+  moonTypography: 'Moon type',
+  moonTypographyHint:
+    'Draws list titles and tasks with the geometric Moon type alphabet, on screen and in print. Letters without a Moon glyph, such as digits, stay in the normal typeface.',
   print: 'Print A4',
   printDialogHint:
     'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. Printers without edge-to-edge support may still add a margin.',
@@ -45,6 +63,11 @@ export const COPY = {
   panelBreak: 'New panel',
   panelBreakDescription: 'Everything below starts on a fresh 99 × 210 mm panel.',
   removePanelBreak: 'Remove panel break',
+  // Removal is the one editor action that destroys content in a single click,
+  // so it is announced with what was removed and paired with a recovery action
+  // that does not depend on knowing a keyboard shortcut.
+  undoRemoval: 'Undo removal',
+  removedPanelBreak: 'Panel break removed.',
   markdownLabel: 'Markdown source',
   markdownHelp:
     'Use ## for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
@@ -95,6 +118,9 @@ export const COPY = {
   moveListDownLabel: (list: string) => `Move ${list} down`,
   removeListLabel: (list: string) => `Remove ${list}`,
   addTaskLabel: (list: string) => `Add task to ${list}`,
+
+  removedTask: (task: string) => `${task} removed.`,
+  removedList: (list: string) => `${list} removed.`,
 
   taskTextLabel: (task: string, list: string) => `${task} in ${list}`,
   taskCompleteLabel: (task: string, list: string) => `Mark ${task} in ${list} complete`,

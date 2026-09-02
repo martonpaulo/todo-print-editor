@@ -2,7 +2,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import { COPY } from '../copy'
 import { groupPanelsIntoPages, PANELS_PER_PAGE, paginateBlocks } from '../domain/pagination'
 import { recordProfileSample } from '../profiling'
-import type { ListBlock, TodoDocument } from '../domain/types'
+import { MoonText } from './MoonText'
+import type { ListBlock, TodoDocument, Typography } from '../domain/types'
 
 export interface LayoutStatus {
   ready: boolean
@@ -53,6 +54,19 @@ const formatDate = (isoDate: string): string => {
   }).format(date)
 }
 
+interface PrintListProps {
+  list: ListBlock
+  typography: Typography
+  overflowing?: boolean
+}
+
+/**
+ * Document content honors the document's typography; the checkbox, the panel number and the date
+ * stay Latin, because they are layout furniture rather than the text the user wrote.
+ */
+const DocumentText = ({ text, typography }: { text: string; typography: Typography }) =>
+  typography === 'moon' ? <MoonText text={text} /> : <>{text}</>
+
 /**
  * Memoized because every list is rendered twice — once in the hidden
  * measurement layer and once in its panel — and an edit changes exactly one
@@ -60,9 +74,11 @@ const formatDate = (isoDate: string): string => {
  * keystroke, which invalidates layout for every list and dominates the measured
  * editing cost (see docs/performance.md).
  */
-const PrintList = memo(({ list, overflowing = false }: { list: ListBlock; overflowing?: boolean }) => (
+const PrintList = memo(({ list, typography, overflowing = false }: PrintListProps) => (
   <section className={`print-list${overflowing ? ' print-list--overflow' : ''}`}>
-    <h2 className="print-list__title">{list.title || COPY.untitledList}</h2>
+    <h2 className="print-list__title">
+      <DocumentText text={list.title || COPY.untitledList} typography={typography} />
+    </h2>
     <div className="print-list__rule" />
     <div className="print-task-grid">
       {list.items.map((item) => (
@@ -73,8 +89,22 @@ const PrintList = memo(({ list, overflowing = false }: { list: ListBlock; overfl
           >
             {item.checked ? '✓' : ''}
           </span>
-          <span className={item.checked ? 'print-task__text print-task__text--checked' : 'print-task__text'}>
-            {item.text || '\u00a0'}
+          <span
+            className={[
+              'print-task__text',
+              item.checked ? 'print-task__text--checked' : '',
+              // The strike over a completed task cannot be a text decoration in Moon mode, so the
+              // stylesheet has to know which of the two ways to draw it applies here.
+              typography === 'moon' ? 'print-task__text--moon' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {item.text ? (
+              <DocumentText text={item.text} typography={typography} />
+            ) : (
+              '\u00a0'
+            )}
           </span>
         </div>
       ))}
@@ -132,7 +162,12 @@ const PrintPanel = ({
       data-capacity-regular={capacityAttribute === 'regular' ? '' : undefined}
     >
       {lists.map((list) => (
-        <PrintList key={list.id} list={list} overflowing={overflowListIds.includes(list.id)} />
+        <PrintList
+          key={list.id}
+          list={list}
+          typography={document.typography}
+          overflowing={overflowListIds.includes(list.id)}
+        />
       ))}
     </div>
   </article>
@@ -169,7 +204,7 @@ const MeasurementLayer = ({
       <div className="measurement-lists">
         {lists.map((list) => (
           <div data-measure-list={list.id} key={list.id}>
-            <PrintList list={list} />
+            <PrintList list={list} typography={document.typography} />
           </div>
         ))}
       </div>

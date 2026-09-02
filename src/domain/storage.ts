@@ -1,4 +1,11 @@
-import type { DocumentBlock, ListBlock, PanelBreakBlock, TodoDocument, TodoItem } from './types'
+import type {
+  DocumentBlock,
+  ListBlock,
+  PanelBreakBlock,
+  TodoDocument,
+  TodoItem,
+  Typography,
+} from './types'
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -30,6 +37,17 @@ const isPanelBreak = (value: unknown): value is PanelBreakBlock =>
 const isDocumentBlock = (value: unknown): value is DocumentBlock =>
   isListBlock(value) || isPanelBreak(value)
 
+/**
+ * `typography` was added after documents were already stored, and the stored shape carries no
+ * migration marker of its own, so an absent value is read as the previous behavior rather than
+ * rejected. Rejecting it would discard the user's only copy of the document. Any present value must
+ * still be one this build understands.
+ */
+const readTypography = (value: unknown): Typography | null => {
+  if (value === undefined) return 'latin'
+  return value === 'latin' || value === 'moon' ? value : null
+}
+
 export const decodeDocument = (value: unknown): TodoDocument | null => {
   if (
     !isRecord(value) ||
@@ -43,6 +61,9 @@ export const decodeDocument = (value: unknown): TodoDocument | null => {
   ) {
     return null
   }
+
+  const typography = readTypography(value.typography)
+  if (typography === null) return null
 
   const parsedDate = new Date(`${value.date}T00:00:00Z`)
   if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== value.date) {
@@ -62,5 +83,5 @@ export const decodeDocument = (value: unknown): TodoDocument | null => {
     }
   }
 
-  return value as unknown as TodoDocument
+  return { ...(value as unknown as TodoDocument), typography }
 }

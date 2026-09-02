@@ -39,6 +39,7 @@ export const createStarterDocument = (): TodoDocument => ({
   date: getLocalIsoDate(),
   showDate: true,
   showPanelNumbers: true,
+  typography: 'latin',
   blocks: [
     createList(COPY.starter.priorities, [...COPY.starter.priorityItems]),
     createList(COPY.starter.smallWins, [...COPY.starter.smallWinItems]),

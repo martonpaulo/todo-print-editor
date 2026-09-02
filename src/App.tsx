@@ -4,11 +4,12 @@ import { COPY } from './copy'
 import { MarkdownEditor } from './components/MarkdownEditor'
 import { Icon } from './components/Icon'
 import { PrintPreview, type LayoutStatus } from './components/PrintPreview'
+import { StorageStatus } from './components/StorageStatus'
 import { VisualEditor } from './components/VisualEditor'
 import { listCardId } from './components/elementIds'
 import { parseMarkdown, serializeMarkdown } from './domain/markdown'
 import type { MarkdownError, TodoDocument } from './domain/types'
-import { usePersistentDocument } from './hooks/usePersistentDocument'
+import { usePersistentDocument, type DocumentEdit } from './hooks/usePersistentDocument'
 
 type EditorMode = 'visual' | 'markdown'
 
@@ -22,6 +23,10 @@ const PRINT_HINT_ID = 'print-dialog-hint'
 // focus between.
 const EDITOR_REGION_ID = 'editor-region'
 const PREVIEW_REGION_ID = 'preview-region'
+
+// The toggle's own name is only the alphabet's name; what switching it does to the document, and
+// which characters keep their Latin form, is carried in an adjacent description.
+const MOON_HINT_ID = 'moon-typography-hint'
 
 // jsdom, and any environment without a layout engine, leaves scrollIntoView
 // undefined; focus() already scrolls, so the explicit call only refines where
@@ -39,8 +44,24 @@ const INITIAL_LAYOUT_STATUS: LayoutStatus = {
   pageCount: 1,
 }
 
+// The removal status names what was removed; the history owner carries only the
+// kind and the subject, so the sentence is assembled here from centralized copy.
+const removalMessage = (edit: DocumentEdit) => {
+  if (edit.kind === 'task-removed') return COPY.removedTask(edit.subject)
+  if (edit.kind === 'list-removed') return COPY.removedList(edit.subject)
+  return COPY.removedPanelBreak
+}
+
 const App = () => {
-  const { document, setDocument, undo, redo } = usePersistentDocument()
+  const {
+    document,
+    status: storageStatus,
+    lastEdit,
+    setDocument,
+    replaceStoredDocument,
+    undo,
+    redo,
+  } = usePersistentDocument()
   const [mode, setMode] = useState<EditorMode>('visual')
   const [markdown, setMarkdown] = useState(() => serializeMarkdown(document))
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
@@ -49,11 +70,40 @@ const App = () => {
   // than on the top of a document that can be several screens tall.
   const lastEditedElement = useRef<HTMLElement | null>(null)
 
-  const applyDocument = useCallback((nextDocument: TodoDocument) => {
-    setDocument(nextDocument)
+  // History traversal happens entirely inside the hook, so the restored document
+  // arrives as the next render rather than as a return value. This flag marks the
+  // one render that must re-serialize the Markdown view; leaving it out of the
+  // effect's condition would overwrite the source the user is currently typing.
+  const replayedDocument = useRef(false)
+
+  useEffect(() => {
+    if (!replayedDocument.current) return
+    replayedDocument.current = false
+    setMarkdown(serializeMarkdown(document))
+    setMarkdownErrors([])
+  }, [document])
+
+  const applyDocument = useCallback((nextDocument: TodoDocument, edit?: DocumentEdit) => {
+    setDocument(nextDocument, edit ?? null)
     setMarkdown(serializeMarkdown(nextDocument))
     setMarkdownErrors([])
   }, [setDocument])
+
+  const undoLastEdit = useCallback(() => {
+    if (undo()) replayedDocument.current = true
+  }, [undo])
+
+  const redoLastEdit = useCallback(() => {
+    if (redo()) replayedDocument.current = true
+  }, [redo])
+
+  // The status disappears with the removal it describes, so focus would fall to
+  // the document body. The editor region is the nearest stable landing point the
+  // restored content is inside of.
+  const undoRemoval = () => {
+    undoLastEdit()
+    revealElement(window.document.getElementById(EDITOR_REGION_ID))
+  }
 
   const applyDocumentSettings = (nextDocument: TodoDocument) => {
     setDocument(nextDocument)
@@ -118,19 +168,17 @@ const App = () => {
       if (e.metaKey || e.ctrlKey) {
         if (e.key === 'z' && !e.shiftKey) {
           e.preventDefault()
-          const prev = undo()
-          if (prev) applyDocument(prev)
+          undoLastEdit()
         } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
           e.preventDefault()
-          const next = redo()
-          if (next) applyDocument(next)
+          redoLastEdit()
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, applyDocument])
+  }, [undoLastEdit, redoLastEdit])
 
   return (
     <div className={`app-shell${canPrint ? '' : ' app-shell--print-blocked'}`}>
@@ -141,6 +189,26 @@ const App = () => {
           tabIndex={-1}
           aria-label={COPY.editorRegion}
         >
+          <StorageStatus
+            status={storageStatus}
+            hasUnsavedDraft={markdownErrors.length > 0}
+            onReplaceStoredDocument={replaceStoredDocument}
+          />
+
+          {/* Removal is immediate and persisted, so the recovery action is on
+              screen rather than only on a keyboard shortcut: the button is
+              reachable by keyboard, pointer, and touch alike, and the status
+              announces what was removed. */}
+          {lastEdit && (
+            <div className="removal-status screen-only" role="status">
+              <Icon name="warning" size={16} />
+              <span>{removalMessage(lastEdit)}</span>
+              <button className="text-button" type="button" onClick={undoRemoval}>
+                {COPY.undoRemoval}
+              </button>
+            </div>
+          )}
+
           <header className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
             <div className="toolbar-group">
               <label className="toggle-control">
@@ -186,7 +254,25 @@ const App = () => {
                 <span>{COPY.panelNumbers}</span>
               </label>
 
-              
+              <label className="toggle-control">
+                <input
+                  type="checkbox"
+                  aria-describedby={MOON_HINT_ID}
+                  checked={document.typography === 'moon'}
+                  onChange={(event) =>
+                    applyDocumentSettings({
+                      ...document,
+                      typography: event.target.checked ? 'moon' : 'latin',
+                    })
+                  }
+                />
+                <span className="toggle-control__track" aria-hidden="true" />
+                <Icon name="moon" size={17} />
+                <span>{COPY.moonTypography}</span>
+              </label>
+              <p className="sr-only" id={MOON_HINT_ID}>
+                {COPY.moonTypographyHint}
+              </p>
 
               <div className="mode-switcher" role="group" aria-label={COPY.editorMode}>
                 <button

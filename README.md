@@ -12,6 +12,7 @@ Design structured todo lists in a visual or Markdown editor, preview atomic `99m
 - Lists automatically move between panels but never split
 - Overflow preflight blocks clipped printouts
 - Optional first-panel date and panel numbering
+- Optional Moon type typography, drawing list content in the 1845 geometric alphabet
 - Browser-only persistence with no account, backend, analytics, or content upload
 - Monochrome design tokens in `src/styles/tokens.css`
 
@@ -61,6 +62,42 @@ The supported subset is deliberately small:
 - `---` forces a new panel.
 - Unsupported lines are reported instead of silently discarded.
 
+### Undo and redo
+
+Structural edits, document settings, and Markdown commits share one document history for the
+current tab.
+
+- Press `Ctrl`/`Cmd` + `Z` to undo and `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl`/`Cmd` + `Y`) to redo.
+  While the cursor is inside a text field the browser's own text undo keeps the shortcut, so typing
+  is corrected where it happens.
+- Removing a task, a list, or a panel break shows a status naming what was removed, next to an
+  **Undo removal** button. The button is an ordinary focusable control, so keyboard, pointer, and
+  touch users all recover the same way.
+- Edits made less than 500 ms apart form one undo step, so typing is not undone character by
+  character. A removal is always its own step, so undoing it never discards a nearby edit and never
+  restores more than the status names. Any edit made after an undo discards the abandoned redo
+  branch.
+- History keeps at most the 100 most recent steps; recording beyond that drops the oldest one.
+- History lives in memory for this tab only. It is never stored, so reloading the page starts a new
+  history over the saved document.
+
+### Moon type
+
+**Moon type** in the toolbar redraws list titles and task text with the geometric alphabet William
+Moon published in 1845, on screen and in the printed page. It is a visual alternative typography,
+not an accessibility feature: the glyphs are vector outlines, not tactile relief.
+
+- The setting belongs to the document and is saved with it in this browser.
+- Moon type is caseless and defines a glyph for each of the 26 Latin letters. Characters it does not
+  cover — digits, punctuation, accented letters — keep their normal typeface, so dates and
+  quantities stay legible.
+- The editor's own input fields stay in the normal typeface, so the document remains editable.
+- The underlying text is unchanged, so screen readers and copied text still read the Latin original.
+
+The outlines are drawn from the published Grade 1 shape descriptions and are authored in
+`src/domain/moon.ts` rather than loaded from a font, so the repository ships no third-party
+typography asset.
+
 ### Printing
 
 Choose **Print A4**, then verify these values in the browser or system print dialog:
@@ -97,6 +134,8 @@ Tests cover Markdown conversion, persisted-data validation, and atomic paginatio
 
 Todo content is stored only in this browser under `localStorage`. The app has no backend, account system, analytics, or content API. Clearing site data removes the saved document.
 
+The editor states whether the document on screen is the one the browser holds. When a write is refused, the draft stays editable and is marked as not saved, so it can be copied out of the Markdown view before the tab closes. When stored content cannot be read, the editor shows a starter draft, saves nothing, and keeps the unreadable value until you choose to replace it.
+
 ## Deployment
 
 Pull requests run lint, tests, and a production build. A validated push to `main` uploads `dist/` and deploys it through GitHub Pages using the repository's native `GITHUB_TOKEN`.
@@ -105,6 +144,7 @@ Pull requests run lint, tests, and a production build. A validated push to `main
 
 - Only the documented Markdown subset round-trips to the visual model.
 - Content does not sync between browsers or devices.
+- Undo history is per tab, is not stored, and keeps at most 100 steps.
 - A single list cannot exceed one panel; shorten it before printing.
 - Editing stays inside one frame up to 25 lists of 10 tasks; larger documents keep working but feel progressively slower. See `docs/performance.md`.
 - Exact physical output depends on 100% print scale and printer-driver behavior.
