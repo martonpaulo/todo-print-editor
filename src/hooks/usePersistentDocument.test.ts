@@ -31,10 +31,24 @@ describe('usePersistentDocument', () => {
     expect(result.current.document).toEqual(saved)
   })
 
-  it('starts a saved starter document when nothing is stored yet', () => {
+  it('writes the starter document on a fresh profile before reporting it saved', () => {
     const { result } = renderHook(() => usePersistentDocument())
 
     expect(result.current.status).toBe('saved')
+    // The claim is backed by the value the browser now holds, not by the absence
+    // of an error.
+    expect(storedDocument()).toEqual(result.current.document)
+  })
+
+  it('never claims a save on a fresh profile whose browser denies storage', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage denied')
+    })
+
+    const { result } = renderHook(() => usePersistentDocument())
+
+    // The denial surfaces on load rather than hiding until the first edit.
+    expect(result.current.status).toBe('write-failed')
     expect(result.current.document.version).toBe(1)
   })
 
@@ -108,6 +122,9 @@ describe('usePersistentDocument', () => {
   })
 
   it('clears the write failure only once a later write succeeds', () => {
+    // Loading a valid document keeps the mount write out of the way, so the
+    // one refused write below is the edit's own.
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(createStarterDocument()))
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
       throw new Error('quota exceeded')
     })

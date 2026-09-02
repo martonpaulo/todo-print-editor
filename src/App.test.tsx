@@ -208,6 +208,26 @@ describe('App', () => {
     )
   })
 
+  it('stops claiming a save while an invalid Markdown draft is unparsed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: COPY.markdownMode }))
+    const source = screen.getByRole('textbox', { name: COPY.markdownLabel })
+    await user.type(source, '\n# not-a-date')
+
+    // The draft never reached the document, so storage cannot hold it.
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.draftNotSavedDescription)).toBeInTheDocument()
+
+    // Removing the invalid line lets the document accept the source again.
+    await user.clear(source)
+    await user.type(source, '## Kept list')
+
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(screen.queryByText(COPY.draftNotSavedDescription)).not.toBeInTheDocument()
+  })
+
   it('restores a valid stored document without any recovery prompt', () => {
     localStorage.setItem(
       STORAGE_KEY,

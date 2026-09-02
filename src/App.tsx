@@ -145,6 +145,7 @@ const App = () => {
         >
           <StorageStatus
             status={storageStatus}
+            hasUnsavedDraft={markdownErrors.length > 0}
             onReplaceStoredDocument={replaceStoredDocument}
           />
 

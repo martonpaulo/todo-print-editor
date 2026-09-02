@@ -19,6 +19,10 @@ export const COPY = {
   // Markdown out of the app.
   saveFailedDescription:
     'This browser refused to store your document. Keep this tab open, and copy your work from the Markdown view before closing it.',
+  // An invalid Markdown source is never parsed into the document, so what is on
+  // screen is newer than what is stored even though nothing failed.
+  draftNotSavedDescription:
+    'The Markdown source has errors, so this draft is not stored. Fix the errors, or copy the source, before closing the tab.',
   loadFailedTitle: 'Could not read your saved document',
   // The unreadable value is still the user's only stored copy, so the message
   // says both that nothing is being saved and that nothing has been destroyed.

@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { createStarterDocument } from '../domain/document'
 import { decodeDocument } from '../domain/storage'
 import type { TodoDocument } from '../domain/types'
@@ -9,6 +9,9 @@ export const STORAGE_KEY = 'todo-print-editor.document.v1'
 /**
  * Observable persistence states.
  *
+ * - `unwritten`: nothing is stored under the key yet, so no save can be claimed.
+ *   The starter document is written once on mount and this state resolves into
+ *   `saved` or `write-failed` from that attempt.
  * - `saved`: the visible document is exactly what browser storage holds.
  * - `write-failed`: the visible draft is newer than storage because a write threw.
  *   Only a later successful write leaves this state.
@@ -16,21 +19,23 @@ export const STORAGE_KEY = 'todo-print-editor.document.v1'
  *   document is an in-memory starter draft and nothing is written, so the
  *   unreadable value survives until the user explicitly replaces it.
  */
-export type PersistenceStatus = 'saved' | 'write-failed' | 'load-failed'
+export type PersistenceStatus = 'unwritten' | 'saved' | 'write-failed' | 'load-failed'
 
 interface DocumentState {
   document: TodoDocument
   status: PersistenceStatus
 }
 
+// Reading stays pure: it reports what storage holds, and never claims a save it
+// has not performed. The first write of a starter document happens on mount.
 const readDocument = (): DocumentState => {
   if (typeof window === 'undefined') {
-    return { document: createStarterDocument(), status: 'saved' }
+    return { document: createStarterDocument(), status: 'unwritten' }
   }
 
   try {
     const source = window.localStorage.getItem(STORAGE_KEY)
-    if (!source) return { document: createStarterDocument(), status: 'saved' }
+    if (!source) return { document: createStarterDocument(), status: 'unwritten' }
 
     const document = decodeDocument(JSON.parse(source))
     return document
@@ -75,6 +80,15 @@ export const usePersistentDocument = () => {
     documentRef.current = nextDocument
     setState({ document: nextDocument, status })
   }, [])
+
+  // A profile with nothing stored must not read as saved. Writing the starter
+  // document once is what settles the question, and it also surfaces a browser
+  // that denies storage outright instead of hiding it until the first edit.
+  // Nothing is overwritten: this runs only while the key is absent.
+  useEffect(() => {
+    if (statusRef.current !== 'unwritten') return
+    apply(documentRef.current, persistDocument(documentRef.current))
+  }, [apply])
 
   const setDocument = useCallback((nextDocument: TodoDocument) => {
     const now = Date.now()
