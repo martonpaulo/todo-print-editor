@@ -34,9 +34,40 @@ describe('Moon type glyph table', () => {
   })
 
   it('has no glyph for characters outside the alphabet', () => {
-    for (const character of ['1', '-', ' ', 'é', '/']) {
+    // `ø` and `ß` are letters that do not canonically decompose to one of the 26, so accent
+    // stripping cannot reach a glyph for them.
+    for (const character of ['1', '-', ' ', '/', 'ø', 'ß', '—']) {
       expect(getMoonGlyph(character), character).toBeNull()
     }
+  })
+
+  // Grade 1 has no accents, so an accented letter is read as its base letter.
+  it('draws an accented letter as its base letter', () => {
+    const accents: Record<string, string> = {
+      á: 'A',
+      ã: 'A',
+      À: 'A',
+      ç: 'C',
+      é: 'E',
+      Ê: 'E',
+      í: 'I',
+      ñ: 'N',
+      ô: 'O',
+      ú: 'U',
+      ü: 'U',
+    }
+
+    for (const [accented, base] of Object.entries(accents)) {
+      expect(getMoonGlyph(accented), accented).toBe(getMoonGlyph(base))
+    }
+  })
+
+  it('draws an accented letter written in decomposed form too', () => {
+    expect(getMoonGlyph('e\u0301')).toBe(getMoonGlyph('E'))
+  })
+
+  it('has no glyph for a standalone combining mark', () => {
+    expect(getMoonGlyph('\u0301')).toBeNull()
   })
 })
 
@@ -80,6 +111,60 @@ describe('toMoonSegments', () => {
       .join('')
 
     expect(rebuilt).toBe(source)
+  })
+
+  // An accented letter used to have no glyph, so it opened a plain segment and split the word it
+  // belonged to into alternating Moon and Latin pieces.
+  describe('accented words', () => {
+    const composed = 'Dúvidas'
+    const decomposed = composed.normalize('NFD')
+
+    it('keeps an accented word one uninterrupted Moon run', () => {
+      for (const word of [composed, decomposed]) {
+        const segments = toMoonSegments(word)
+
+        // Bounded chunks may still split the run, but nothing in it falls back to Latin.
+        expect(new Set(segments.map((segment) => segment.kind)), word).toEqual(new Set(['moon']))
+        expect(
+          segments.flatMap((segment) =>
+            segment.kind === 'moon' ? segment.glyphs.map((glyph) => glyph.letter) : [],
+          ),
+          word,
+        ).toEqual(['D', 'U', 'V', 'I', 'D', 'A', 'S'])
+      }
+    })
+
+    it('reads the same whichever normal form the text is written in', () => {
+      expect(decomposed).not.toBe(composed)
+      const glyphsOf = (word: string) =>
+        toMoonSegments(word).flatMap((segment) =>
+          segment.kind === 'moon' ? segment.glyphs.map((glyph) => glyph.letter) : [],
+        )
+
+      expect(glyphsOf(decomposed)).toEqual(glyphsOf(composed))
+    })
+
+    it('loses no character of an accented source', () => {
+      for (const word of [`${composed} — 2 itens`, decomposed]) {
+        const rebuilt = toMoonSegments(word)
+          .map((segment) => (segment.kind === 'moon' ? segment.source : segment.text))
+          .join('')
+
+        expect(rebuilt, word).toBe(word)
+      }
+    })
+
+    it('still falls back to plain text around the accented word', () => {
+      expect(
+        toMoonSegments('Programação: 2').map((segment) =>
+          segment.kind === 'moon' ? ['moon', segment.source] : ['plain', segment.text],
+        ),
+      ).toEqual([
+        ['moon', 'Progra'],
+        ['moon', 'mação'],
+        ['plain', ': 2'],
+      ])
+    })
   })
 
   it('returns nothing for empty text', () => {
