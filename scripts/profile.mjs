@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import puppeteer from 'puppeteer'
@@ -50,17 +51,22 @@ const waitFor = async (probe, description, timeoutMs = 60_000) => {
 }
 
 const launchBrowser = async () => {
-  const options = { args: ['--no-sandbox', '--disable-dev-shm-usage'] }
-  try {
-    return await puppeteer.launch(options)
-  } catch (error) {
-    // npm may be configured to skip install scripts, which is where Puppeteer
-    // normally provisions its pinned Chrome. Fetch it once through Puppeteer's
-    // own CLI rather than asking for a manual setup step.
-    if (!String(error).includes('Could not find Chrome')) throw error
+  // npm may be configured to skip install scripts, which is where Puppeteer
+  // normally provisions the Chrome build `.puppeteerrc.cjs` pins. Fetch it once
+  // through Puppeteer's own CLI rather than asking for a manual setup step.
+  //
+  // Checked before launching rather than recovered from a launch failure: with a
+  // configured `chrome.version`, Puppeteer reports a missing binary as `Tried to
+  // find the browser at the configured path (...) for version ...` instead of
+  // `Could not find Chrome`, so matching either message would leave a first run
+  // on an empty cache aborting instead of provisioning. The no-argument
+  // `executablePath()` overload never validates the path, so it reports where the
+  // configured build belongs whether or not it is installed.
+  if (!existsSync(await puppeteer.executablePath())) {
     execFileSync('npx', ['puppeteer', 'browsers', 'install', 'chrome'], { stdio: 'inherit' })
-    return await puppeteer.launch(options)
   }
+
+  return await puppeteer.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] })
 }
 
 const METRICS = [
