@@ -189,6 +189,23 @@ describe('App', () => {
     expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toBeChecked()
   })
 
+  it('keeps completed tasks marked as completed in Moon type', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const [task] = screen.getAllByRole('checkbox', { name: /^Mark Task 1/ })
+    await user.click(task)
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    // A CSS text decoration is not propagated into atomic inline boxes, and every Moon word is one,
+    // so the completed state has to be drawn a second way. The stylesheet keys that off this class.
+    const struck = preview.querySelector('.print-task__text--checked')
+    expect(struck).not.toBeNull()
+    expect(struck).toHaveClass('print-task__text--moon')
+    expect(struck!.querySelector('.moon-word')).not.toBeNull()
+  })
+
   it('describes what the Moon type toggle changes', () => {
     render(<App />)
 

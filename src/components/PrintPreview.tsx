@@ -80,7 +80,17 @@ const PrintList = memo(({ list, typography, overflowing = false }: PrintListProp
           >
             {item.checked ? '✓' : ''}
           </span>
-          <span className={item.checked ? 'print-task__text print-task__text--checked' : 'print-task__text'}>
+          <span
+            className={[
+              'print-task__text',
+              item.checked ? 'print-task__text--checked' : '',
+              // The strike over a completed task cannot be a text decoration in Moon mode, so the
+              // stylesheet has to know which of the two ways to draw it applies here.
+              typography === 'moon' ? 'print-task__text--moon' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
             {item.text ? (
               <DocumentText text={item.text} typography={typography} />
             ) : (

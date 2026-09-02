@@ -70,6 +70,22 @@ const panelBreakDocument = (
  */
 const LONG_RUN = 'Supercalifragilistic'.repeat(10)
 
+const checkedTaskDocument = (typography: Typography): TodoDocument => ({
+  version: 1,
+  date: '2026-01-01',
+  showDate: false,
+  showPanelNumbers: false,
+  typography,
+  blocks: [
+    {
+      kind: 'list',
+      id: 'list-checked',
+      title: 'Done',
+      items: [{ id: 'item-checked', text: 'Buy milk today', checked: true }],
+    },
+  ],
+})
+
 const longRunDocument = (typography: Typography): TodoDocument => ({
   version: 1,
   date: '2026-01-01',
@@ -141,6 +157,8 @@ describe('printed page geometry', () => {
   let moonGlyphsUnderPrintMedia = 0
   let longRunMoon = { overflowMm: 0, listHeightMm: 0 }
   let longRunLatin = { overflowMm: 0, listHeightMm: 0 }
+  let latinStrike = { decoration: '', paintedMm: 0 }
+  let moonStrike = { decoration: '', paintedMm: 0 }
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -232,16 +250,39 @@ describe('printed page geometry', () => {
       listHeightMm: pxToMm(listHeightPx),
     }))
 
-  const renderLongRun = async (appUrl: string, typography: Typography): Promise<void> => {
+  const renderDocument = async (appUrl: string, document: TodoDocument): Promise<void> => {
     await page.goto(appUrl, { waitUntil: 'networkidle0' })
     await page.evaluate(
-      (key: string, document: string) => window.localStorage.setItem(key, document),
+      (key: string, value: string) => window.localStorage.setItem(key, value),
       STORAGE_KEY,
-      JSON.stringify(longRunDocument(typography)),
+      JSON.stringify(document),
     )
     await page.reload({ waitUntil: 'networkidle0' })
     await page.waitForSelector('.print-page')
   }
+
+  /**
+   * How a completed task is struck through: the text decoration the stylesheet applies, and the
+   * height of any background the strike is painted with instead. A decoration is not propagated into
+   * atomic inline boxes, so in Moon mode the first is inert and only the second reaches the words.
+   */
+  const measureStrike = async (): Promise<{ decoration: string; paintedMm: number }> =>
+    page
+      .evaluate(() => {
+        const text = window.document.querySelector('.preview-stage .print-task__text--checked')
+        if (!text) throw new Error('The checked-task document rendered no completed task')
+        const painted = text.querySelector('.moon-text__glyphs') ?? text
+
+        const textStyle = window.getComputedStyle(text)
+        const paintedStyle = window.getComputedStyle(painted)
+        const [, height = '0px'] = paintedStyle.backgroundSize.split(' ')
+
+        return {
+          decoration: textStyle.textDecorationLine,
+          paintedPx: paintedStyle.backgroundImage === 'none' ? 0 : Number.parseFloat(height),
+        }
+      })
+      .then(({ decoration, paintedPx }) => ({ decoration, paintedMm: pxToMm(paintedPx) }))
 
   const forShape = (panelCount: number): Measurement => {
     const result = measured.get(panelCount)
@@ -291,10 +332,15 @@ describe('printed page geometry', () => {
     }
     moon = { sheets: await measureSheets(), paper: await measurePrintedPaper() }
 
-    await renderLongRun(appUrl, 'latin')
+    await renderDocument(appUrl, longRunDocument('latin'))
     longRunLatin = await measureLongRun()
-    await renderLongRun(appUrl, 'moon')
+    await renderDocument(appUrl, longRunDocument('moon'))
     longRunMoon = await measureLongRun()
+
+    await renderDocument(appUrl, checkedTaskDocument('latin'))
+    latinStrike = await measureStrike()
+    await renderDocument(appUrl, checkedTaskDocument('moon'))
+    moonStrike = await measureStrike()
   }, 300_000)
 
   afterAll(async () => {
@@ -350,6 +396,18 @@ describe('printed page geometry', () => {
     // An unbreakable run would stay one line tall and print without ever tripping the overflow guard.
     expect(longRunMoon.listHeightMm).toBeGreaterThan(longRunLatin.listHeightMm / 2)
     expect(longRunMoon.listHeightMm).toBeGreaterThan(20)
+  })
+
+  it('strikes a completed task through in both typographies', () => {
+    // Latin relies on the text decoration, which is all it needs.
+    expect(latinStrike.decoration).toBe('line-through')
+
+    // Moon cannot: CSS text decorations do not decorate atomic inline boxes, and every Moon word is
+    // one (https://www.w3.org/TR/css-text-decor-3/#line-decoration), so a `line-through` here would
+    // strike the spaces between the words and skip the words themselves. The strike has to be
+    // painted, and this asserts that something paints it.
+    expect(moonStrike.paintedMm).toBeGreaterThan(0)
+    expect(moonStrike.decoration).toBe('none')
   })
 
   it('keeps the printed geometry identical when the document uses Moon typography', () => {
