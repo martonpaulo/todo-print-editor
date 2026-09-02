@@ -19,7 +19,7 @@ Design structured todo lists in a visual or Markdown editor, preview atomic `99m
 
 - Node.js 24 or a Vite 8-compatible Node.js release
 - npm 11+
-- A modern browser with `localStorage`, `ResizeObserver`, and print CSS support
+- A Chromium-family browser with `localStorage`, `ResizeObserver`, and print CSS support. Chromium is the supported family; print output is verified against it only.
 
 ## Setup
 

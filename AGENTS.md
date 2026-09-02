@@ -39,6 +39,7 @@ Treat these values as stable project decisions. Change an established identifier
 - A list is atomic during pagination. Move the whole list to the next panel when it does not fit; never split it. Block printing when one list cannot fit an otherwise empty panel.
 - Render the optional date only on the first panel. Render optional panel numbering on every panel.
 - Keep print output monochrome and preserve physical dimensions. Screen-only controls must not appear in print.
+- The supported browser family is Chromium. Print correctness is defined, verified, and accepted against Chromium only; no acceptance criterion, check, or contract may require Gecko or WebKit behaviour.
 
 ## Established project patterns
 
