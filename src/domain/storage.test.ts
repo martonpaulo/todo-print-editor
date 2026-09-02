@@ -18,12 +18,29 @@ const validDocument = {
 
 describe('persisted document validation', () => {
   it('accepts a complete version-one document', () => {
-    expect(decodeDocument(validDocument)).toEqual(validDocument)
+    expect(decodeDocument({ ...validDocument, typography: 'latin' })).toEqual({
+      ...validDocument,
+      typography: 'latin',
+    })
+  })
+
+  it('keeps a stored Moon typography setting', () => {
+    expect(decodeDocument({ ...validDocument, typography: 'moon' })).toMatchObject({
+      typography: 'moon',
+    })
+  })
+
+  // Documents were persisted before the setting existed, and their only copy is the browser's.
+  // Rejecting them would discard the user's document rather than migrate it.
+  it('reads a document stored before typography existed as Latin', () => {
+    expect(decodeDocument(validDocument)).toEqual({ ...validDocument, typography: 'latin' })
   })
 
   it.each([
     null,
     { ...validDocument, version: 2 },
+    { ...validDocument, typography: 'braille' },
+    { ...validDocument, typography: null },
     { ...validDocument, date: 'August 24' },
     { ...validDocument, blocks: [{ kind: 'list' }] },
     {

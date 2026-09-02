@@ -21,6 +21,9 @@ export const COPY = {
   firstPanelDate: 'Date on first panel',
   chooseDate: 'Choose document date',
   panelNumbers: 'Panel numbers',
+  moonTypography: 'Moon type',
+  moonTypographyHint:
+    'Draws list titles and tasks with the geometric Moon type alphabet, on screen and in print. Letters without a Moon glyph, such as digits, stay in the normal typeface.',
   print: 'Print A4',
   printDialogHint:
     'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. Printers without edge-to-edge support may still add a margin.',

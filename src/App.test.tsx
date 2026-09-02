@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { STORAGE_KEY } from './hooks/usePersistentDocument'
 import { COPY } from './copy'
 
 // jsdom reports every box as zero, so the layout never finishes measuring and the
@@ -154,6 +155,46 @@ describe('App', () => {
     expect(back).toHaveClass('narrow-only')
     // It lives in the preview pane, so it also has to stay out of print output.
     expect(back).toHaveClass('screen-only')
+  })
+
+  it('switches the previewed document to Moon type and back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const preview = screen.getByRole('region', { name: COPY.previewRegion })
+    const toggle = screen.getByRole('checkbox', { name: COPY.moonTypography })
+    expect(preview.querySelector('.moon-word')).toBeNull()
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).not.toBeNull()
+    // The glyphs are a visual cipher, so what the document says is unchanged: the Latin text is
+    // still there for assistive technology, and the panel number stays in the normal typeface.
+    expect(preview).toHaveTextContent(COPY.starter.priorities)
+
+    await user.click(toggle)
+    expect(preview.querySelector('.moon-word')).toBeNull()
+  })
+
+  it('persists the Moon type setting with the document', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: COPY.moonTypography }))
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.typography).toBe('moon')
+
+    cleanup()
+    render(<App />)
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toBeChecked()
+  })
+
+  it('describes what the Moon type toggle changes', () => {
+    render(<App />)
+
+    expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toHaveAccessibleDescription(
+      COPY.moonTypographyHint,
+    )
   })
 
 })

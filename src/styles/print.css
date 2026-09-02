@@ -140,6 +140,24 @@
   line-height: 1.22;
 }
 
+/*
+ * Moon words are inline-block SVGs sized in `em`, so they inherit the surrounding font size and
+ * `currentColor` and therefore scale with the print tokens exactly as Latin text does. Wrapping stays
+ * with the browser: it breaks at the plain whitespace between words.
+ */
+.moon-text,
+.moon-text__glyphs {
+  display: inline;
+}
+
+.moon-word {
+  display: inline-block;
+  /* Round stroke caps reach past the glyph band, and a clipped viewport would shave them off. */
+  overflow: visible;
+  /* The band's bottom edge is the baseline, so no vertical offset is needed. */
+  vertical-align: baseline;
+}
+
 .print-task__text--checked {
   text-decoration: line-through;
   text-decoration-thickness: 0.25mm;

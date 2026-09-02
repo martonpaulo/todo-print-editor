@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import puppeteer, { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
-import type { TodoDocument } from '../../src/domain/types'
+import type { TodoDocument, Typography } from '../../src/domain/types'
 import { readPrintContract, readPrintPanelClamp } from './contract'
 
 const contract = readPrintContract()
@@ -43,11 +43,15 @@ const PANEL_COUNTS = [1, 2, contract.panelsPerPage, contract.panelsPerPage + 1]
  * Panel breaks, not text volume, decide the panel count here. The geometry under test is physical,
  * so nothing in this document may depend on how a font happens to render on the running machine.
  */
-const panelBreakDocument = (panelCount: number): TodoDocument => ({
+const panelBreakDocument = (
+  panelCount: number,
+  typography: Typography = 'latin',
+): TodoDocument => ({
   version: 1,
   date: '2026-01-01',
   showDate: true,
   showPanelNumbers: true,
+  typography,
   blocks: Array.from({ length: panelCount }, (_, index) => index).flatMap((index) => [
     ...(index === 0 ? [] : ([{ kind: 'panel-break', id: `break-${index}` }] as const)),
     {
@@ -110,6 +114,8 @@ describe('printed page geometry', () => {
   const measured = new Map<number, Measurement>()
   let printMediaSheets: MeasuredSheet[] = []
   let sheetsAfterRestore: MeasuredSheet[] = []
+  let moon: Measurement | null = null
+  let moonGlyphsUnderPrintMedia = 0
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -155,12 +161,16 @@ describe('printed page geometry', () => {
     return boxes
   }
 
-  const render = async (appUrl: string, panelCount: number): Promise<void> => {
+  const render = async (
+    appUrl: string,
+    panelCount: number,
+    typography: Typography = 'latin',
+  ): Promise<void> => {
     await page.goto(appUrl, { waitUntil: 'networkidle0' })
     await page.evaluate(
       (key: string, document: string) => window.localStorage.setItem(key, document),
       STORAGE_KEY,
-      JSON.stringify(panelBreakDocument(panelCount)),
+      JSON.stringify(panelBreakDocument(panelCount, typography)),
     )
     await page.reload({ waitUntil: 'networkidle0' })
     await page.waitForSelector('.print-page')
@@ -199,6 +209,20 @@ describe('printed page geometry', () => {
       await page.emulateMediaType(undefined)
     }
     sheetsAfterRestore = await measureSheets()
+
+    // The Moon typography setting replaces list content with SVG glyphs. Measuring the same
+    // document shape with it on is what proves the physical contract is a property of the layout
+    // rather than of the typeface the content happens to use.
+    await render(appUrl, contract.panelsPerPage, 'moon')
+    await page.emulateMediaType('print')
+    try {
+      moonGlyphsUnderPrintMedia = await page.evaluate(
+        () => window.document.querySelectorAll('.print-panel .moon-word').length,
+      )
+    } finally {
+      await page.emulateMediaType(undefined)
+    }
+    moon = { sheets: await measureSheets(), paper: await measurePrintedPaper() }
   }, 300_000)
 
   afterAll(async () => {
@@ -241,6 +265,23 @@ describe('printed page geometry', () => {
       expect(paper).toHaveLength(sheets.length)
     })
     expect(printMediaSheets.length).toBeGreaterThan(0)
+  })
+
+  it('keeps the printed geometry identical when the document uses Moon typography', () => {
+    const measuredMoon = moon
+    if (!measuredMoon) throw new Error('No Moon-typography measurement was collected')
+    const latin = forShape(contract.panelsPerPage)
+
+    expectUnscaled(measuredMoon.sheets)
+    expectSequentialPanels(measuredMoon.sheets)
+    expect(measuredMoon.sheets).toEqual(latin.sheets)
+    expect(measuredMoon.paper).toEqual(latin.paper)
+  })
+
+  it('keeps the Moon glyphs in the panels the printer receives', () => {
+    // The print stylesheet hides the editor and the measurement layer; the glyphs are document
+    // content, so they have to survive into the printed panels.
+    expect(moonGlyphsUnderPrintMedia).toBeGreaterThan(0)
   })
 
   it('renders one sheet of sequential panels at the recorded millimetre sizes', () => {
