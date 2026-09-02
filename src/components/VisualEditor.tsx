@@ -260,7 +260,7 @@ export const VisualEditor = ({
         <button
           className="secondary-button"
           type="button"
-          onClick={() => apply(appendBlock(document, createList()))}
+          onClick={() => apply(appendBlock(document, createList(COPY.untitledList)))}
         >
           <Icon name="plus" />
           {COPY.addList}

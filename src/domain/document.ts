@@ -1,5 +1,10 @@
-import { COPY } from '../copy'
-import type { ListBlock, PanelBreakBlock, TodoDocument, TodoItem } from './types'
+import type {
+  DocumentBlock,
+  ListBlock,
+  PanelBreakBlock,
+  TodoDocument,
+  TodoItem,
+} from './types'
 
 export const createId = (prefix: string): string => {
   const value = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
@@ -19,10 +24,10 @@ export const createTodoItem = (text = ''): TodoItem => ({
   checked: false,
 })
 
-export const createList = (
-  title: string = COPY.untitledList,
-  items: string[] = [''],
-): ListBlock => ({
+// Structural factories carry no wording: a caller that shows a list to a user supplies the title
+// from centralized product copy, so `src/copy.ts` never participates in building the persisted
+// model. `items` defaults to one empty task because an editable list always has a row.
+export const createList = (title: string, items: readonly string[] = ['']): ListBlock => ({
   id: createId('list'),
   kind: 'list',
   title,
@@ -34,18 +39,11 @@ export const createPanelBreak = (): PanelBreakBlock => ({
   kind: 'panel-break',
 })
 
-export const createStarterDocument = (): TodoDocument => ({
+export const createDocument = (blocks: DocumentBlock[]): TodoDocument => ({
   version: 1,
   date: getLocalIsoDate(),
   showDate: true,
   showPanelNumbers: true,
   typography: 'latin',
-  blocks: [
-    createList(COPY.starter.priorities, [...COPY.starter.priorityItems]),
-    createList(COPY.starter.smallWins, [...COPY.starter.smallWinItems]),
-    createPanelBreak(),
-    createList(COPY.starter.work, [...COPY.starter.workItems]),
-    createPanelBreak(),
-    createList(COPY.starter.personal, [...COPY.starter.personalItems]),
-  ],
+  blocks,
 })
