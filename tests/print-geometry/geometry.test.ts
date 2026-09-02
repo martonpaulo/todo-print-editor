@@ -34,8 +34,9 @@ const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_P
 const round = (mm: number): number => Math.round(mm * 10) / 10
 
 /**
- * Document shapes worth measuring: one and two panels are partial sheets, the recorded panel count
- * is the full sheet, and one more than that produces a full sheet followed by a trailing partial.
+ * Document shapes worth measuring: one and two panels leave trailing filler slots, the recorded
+ * panel count fills a sheet exactly, and one more than that produces a full sheet followed by a
+ * sheet that is filler for all but its first slot.
  */
 const PANEL_COUNTS = [1, 2, contract.panelsPerPage, contract.panelsPerPage + 1]
 
@@ -440,7 +441,7 @@ describe('printed page geometry', () => {
     })
   })
 
-  it.each(PANEL_COUNTS)('renders %i panels as sequential 99mm slots of full-height paper', (panelCount) => {
+  it.each(PANEL_COUNTS)('renders %i panels as sequential slots of full-height paper', (panelCount) => {
     const { sheets, paper } = forShape(panelCount)
 
     expectUnscaled(sheets)
@@ -451,11 +452,9 @@ describe('printed page geometry', () => {
     // Half a millimetre: the PDF writes points rounded to two decimals, so an exact millimetre
     // comparison would fail on the rounding rather than on the geometry.
     //
-    // Every sheet's paper is pinned positively, including the partial ones the contract does not
-    // sanction: its width must be its slot count times the recorded panel width. That number comes
-    // from `AGENTS.md`, so this rejects any drift in a partial sheet's paper — a one-panel sheet
-    // printing 50mm instead of 99mm fails here — while the separate question of whether a partial
-    // sheet may exist at all stays with #2 below.
+    // Every sheet's paper is pinned to its slot count times the recorded panel width, a number that
+    // comes from `AGENTS.md`. Since #2 every sheet carries the full slot count, so this is the
+    // recorded page width for all of them; the aggregate check below states that directly.
     paper.forEach((sheet, index) => {
       expect(sheet.heightMm).toBeCloseTo(contract.pageHeightMm, 0)
       expect(sheet.widthMm).toBeCloseTo(sheets[index].panels.length * contract.panelWidthMm, 0)
@@ -521,22 +520,19 @@ describe('printed page geometry', () => {
 
   /**
    * The contract assertion the acceptance criterion asks for: every sheet a document produces is
-   * the recorded page size with the recorded number of panel slots.
+   * the recorded page size with the recorded number of panel slots, trailing slots being blank
+   * fillers rather than a narrower sheet. Enforcing since #2 removed the `@page page-1` and
+   * `page-2` named sizes that made partial sheets print 99mm and 198mm paper.
    *
-   * Marked `fails` because it does not hold yet. `PrintPreview` assigns `@page page-1` and `page-2`
-   * named sizes, so partial and trailing sheets print 99mm and 198mm paper — the open defect #2,
-   * which #18 is scoped out of fixing (`Verification only. No change to pagination behaviour, the
-   * editor, or the print stylesheet.`).
-   *
-   * What is written here is the contract, not the defect: nothing records 99mm or 198mm as
-   * acceptable. The body is a pure comparison over measurements already collected in `beforeAll`,
-   * so no browser error can be mistaken for the known violation, and it compares whole aggregates
-   * rather than looping, so every shape is exercised rather than stopping at the first mismatch.
+   * The body is a pure comparison over measurements already collected in `beforeAll`, so no browser
+   * error can be reported as a geometry result, and it compares whole aggregates rather than
+   * looping, so every shape is exercised rather than stopping at the first mismatch.
    */
-  it.fails('prints every sheet at the recorded page size with the recorded panel slots (blocked by #2)', () => {
-    const sheetWidths = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => round(s.widthMm)))
-    const slotCounts = PANEL_COUNTS.flatMap((n) => forShape(n).sheets.map((s) => s.panels.length))
-    const paperWidths = PANEL_COUNTS.flatMap((n) => forShape(n).paper.map((s) => round(s.widthMm)))
+  it('prints every sheet at the recorded page size with the recorded panel slots', () => {
+    const shapes = PANEL_COUNTS.map((n) => forShape(n))
+    const sheetWidths = shapes.flatMap((m) => m.sheets.map((s) => round(s.widthMm)))
+    const slotCounts = shapes.flatMap((m) => m.sheets.map((s) => s.panels.length))
+    const paperWidths = shapes.flatMap((m) => m.paper.map((s) => round(s.widthMm)))
 
     expect(sheetWidths).toEqual(sheetWidths.map(() => contract.pageWidthMm))
     expect(slotCounts).toEqual(slotCounts.map(() => contract.panelsPerPage))
