@@ -71,6 +71,7 @@ const panelBreakDocument = (
  * `overflow: visible` on `.print-panel` would paint it across the divider into the next one.
  */
 const LONG_RUN = 'Supercalifragilistic'.repeat(10)
+const MOON_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 const checkedTaskDocument = (typography: Typography): TodoDocument => ({
   version: 1,
@@ -104,6 +105,28 @@ const longRunDocument = (typography: Typography): TodoDocument => ({
   ],
 })
 
+const moonGeometryDocument: TodoDocument = {
+  version: 1,
+  date: '2026-01-01',
+  showDate: false,
+  showPanelNumbers: false,
+  typography: 'moon',
+  blocks: [
+    {
+      kind: 'list',
+      id: 'list-moon-geometry',
+      title: MOON_ALPHABET,
+      items: [
+        {
+          id: 'item-moon-rhythm',
+          text: 'CASA ACADEMIA ROTINA GINASIO CASA ACADEMIA ROTINA GINASIO',
+          checked: false,
+        },
+      ],
+    },
+  ],
+}
+
 interface MeasuredBox {
   widthMm: number
   heightMm: number
@@ -125,6 +148,22 @@ interface Paper {
 interface Measurement {
   sheets: MeasuredSheet[]
   paper: Paper[]
+}
+
+interface MoonGeometry {
+  glyphBounds: Array<{
+    letter: string
+    minX: number
+    minY: number
+    maxX: number
+    maxY: number
+    advance: number
+    bandHeight: number
+  }>
+  titleLineHeightRatio: number
+  taskLineHeightRatio: number
+  taskLineCount: number
+  wordSpacingPx: number
 }
 
 const launchBrowser = async (): Promise<Browser> => {
@@ -166,6 +205,7 @@ describe('printed page geometry', () => {
   let longRunLatin = { overflowMm: 0, listHeightMm: 0 }
   let latinStrike = { decoration: '', paintedMm: 0 }
   let moonStrike = { decoration: '', paintedMm: 0 }
+  let moonGeometry: MoonGeometry | null = null
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -291,6 +331,61 @@ describe('printed page geometry', () => {
       })
       .then(({ decoration, paintedPx }) => ({ decoration, paintedMm: pxToMm(paintedPx) }))
 
+  const measureMoonGeometry = async (): Promise<MoonGeometry> =>
+    page.evaluate((alphabet: string) => {
+      const title = window.document.querySelector('.preview-stage .print-list__title .moon-text')
+      const task = window.document.querySelector('.preview-stage .print-task__text--moon .moon-text')
+      if (!title || !task) throw new Error('The Moon geometry document did not render its text')
+
+      const groups = [...title.querySelectorAll<SVGGElement>('.moon-word g')]
+      if (groups.length !== alphabet.length) {
+        throw new Error(`Expected ${alphabet.length} Moon glyphs, rendered ${groups.length}`)
+      }
+
+      const glyphBounds = groups.map((group, index) => {
+        const svg = group.closest('svg')
+        if (!svg) throw new Error('A Moon glyph group has no SVG viewport')
+        const groupCount = svg.querySelectorAll(':scope > g').length
+        const advance = svg.viewBox.baseVal.width / groupCount
+        const box = group.getBBox()
+        const strokePadding = Math.max(
+          0,
+          ...[...group.querySelectorAll('path')].map((path) =>
+            path.getAttribute('stroke') === 'none'
+              ? 0
+              : Number.parseFloat(path.getAttribute('stroke-width') ?? '0') / 2,
+          ),
+        )
+
+        return {
+          letter: alphabet[index],
+          minX: box.x - strokePadding,
+          minY: box.y - strokePadding,
+          maxX: box.x + box.width + strokePadding,
+          maxY: box.y + box.height + strokePadding,
+          advance,
+          bandHeight: svg.viewBox.baseVal.height,
+        }
+      })
+
+      const lineHeightRatio = (element: Element): number => {
+        const style = window.getComputedStyle(element)
+        return Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize)
+      }
+      const taskStyle = window.getComputedStyle(task)
+      const taskLineHeight = Number.parseFloat(taskStyle.lineHeight)
+      const glyphStyle = window.getComputedStyle(task.querySelector('.moon-text__glyphs') ?? task)
+
+      return {
+        glyphBounds,
+        titleLineHeightRatio: lineHeightRatio(title),
+        taskLineHeightRatio: lineHeightRatio(task),
+        taskLineCount: Math.round(task.getBoundingClientRect().height / taskLineHeight),
+        wordSpacingPx:
+          glyphStyle.wordSpacing === 'normal' ? 0 : Number.parseFloat(glyphStyle.wordSpacing),
+      }
+    }, MOON_ALPHABET)
+
   const forShape = (panelCount: number): Measurement => {
     const result = measured.get(panelCount)
     if (!result) throw new Error(`No measurement was collected for ${panelCount} panels`)
@@ -348,6 +443,9 @@ describe('printed page geometry', () => {
     latinStrike = await measureStrike()
     await renderDocument(appUrl, checkedTaskDocument('moon'))
     moonStrike = await measureStrike()
+
+    await renderDocument(appUrl, moonGeometryDocument)
+    moonGeometry = await measureMoonGeometry()
   }, 300_000)
 
   afterAll(async () => {
@@ -432,6 +530,40 @@ describe('printed page geometry', () => {
     // The print stylesheet hides the editor and the measurement layer; the glyphs are document
     // content, so they have to survive into the printed panels.
     expect(moonGlyphsUnderPrintMedia).toBeGreaterThan(0)
+  })
+
+  it('keeps every Moon glyph inside its fixed SVG cell', () => {
+    const geometry = moonGeometry
+    if (!geometry) throw new Error('No Moon glyph geometry was collected')
+
+    expect(geometry.glyphBounds).toHaveLength(MOON_ALPHABET.length)
+    geometry.glyphBounds.forEach((bounds) => {
+      expect(Number.isFinite(bounds.minX), `${bounds.letter} has a finite left bound`).toBe(true)
+      expect(Number.isFinite(bounds.minY), `${bounds.letter} has a finite top bound`).toBe(true)
+      expect(bounds.minX, `${bounds.letter} stays inside the left cell edge`).toBeGreaterThanOrEqual(
+        0,
+      )
+      expect(bounds.minY, `${bounds.letter} stays inside the top band edge`).toBeGreaterThanOrEqual(
+        0,
+      )
+      expect(bounds.maxX, `${bounds.letter} stays inside the right cell edge`).toBeLessThanOrEqual(
+        bounds.advance,
+      )
+      expect(bounds.maxY, `${bounds.letter} stays inside the bottom band edge`).toBeLessThanOrEqual(
+        bounds.bandHeight,
+      )
+    })
+  })
+
+  it('uses one Moon line-height and an explicit word gap in titles and tasks', () => {
+    const geometry = moonGeometry
+    if (!geometry) throw new Error('No Moon text rhythm was collected')
+
+    expect(geometry.titleLineHeightRatio).toBeCloseTo(1.24, 1)
+    expect(geometry.taskLineHeightRatio).toBeCloseTo(1.24, 1)
+    expect(geometry.titleLineHeightRatio).toBeCloseTo(geometry.taskLineHeightRatio, 2)
+    expect(geometry.taskLineCount).toBeGreaterThan(1)
+    expect(geometry.wordSpacingPx).toBeGreaterThan(0)
   })
 
   it('renders one sheet of sequential panels at the recorded millimetre sizes', () => {

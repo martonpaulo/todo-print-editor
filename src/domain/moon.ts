@@ -10,32 +10,34 @@
  *
  * Each glyph records the published shape description it was drawn from, so a fidelity correction is
  * a one-line edit against a citable source:
+ * https://commons.wikimedia.org/wiki/File:Moon-type-chart.jpg
  * https://en.wikipedia.org/wiki/Moon_type and https://fakoo.de/en/moon.html
  */
 
 /**
- * Glyphs are drawn in a band 100 units tall whose bottom edge is the text baseline, so a rendered
- * word sits on the surrounding line box without a vertical offset. Horizontal units share the same
- * scale, which is why `advance` is comparable to `MOON_BAND_HEIGHT`.
+ * Glyphs are drawn in a band 100 units tall. Horizontal units share the same scale, which is why
+ * `advance` is comparable to `MOON_BAND_HEIGHT`; `MoonText` owns how that band sits on a Latin
+ * baseline.
  */
 export const MOON_BAND_HEIGHT = 100
 
-/** Stroke width of every drawn glyph. Moon type is deliberately bold. */
-export const MOON_STROKE_WIDTH = 9
+/** Fixed width of the monospaced cell occupied by every Grade 1 glyph. */
+export const MOON_GLYPH_ADVANCE = 88
 
-// The drawing frame. Insets leave room for the stroke's round caps on all four sides.
-const TOP = 16
-const BOTTOM = 84
+/** Stroke width of every drawn glyph. Moon type is deliberately bold. */
+export const MOON_STROKE_WIDTH = 12
+
+// A square drawing frame inside the fixed cell. The insets leave equal room for the shared stroke's
+// round caps and joins, so no glyph paints outside its view box.
+const FRAME_SIZE = 64
+const TOP = (MOON_BAND_HEIGHT - FRAME_SIZE) / 2
+const BOTTOM = TOP + FRAME_SIZE
 const MIDDLE = (TOP + BOTTOM) / 2
-const LEFT = 8
-const RIGHT = 56
+const LEFT = (MOON_GLYPH_ADVANCE - FRAME_SIZE) / 2
+const RIGHT = LEFT + FRAME_SIZE
 const CENTER = (LEFT + RIGHT) / 2
 
-/** Trailing side bearing: the advance is the drawing frame plus one gap between letters. */
-const LETTER_ADVANCE = RIGHT + 18
-const RADIUS = (BOTTOM - TOP) / 2
-/** Radius of the semicircles that open up or down, bounded by the frame's width rather than its height. */
-const WIDE_RADIUS = (RIGHT - LEFT) / 2
+const RADIUS = FRAME_SIZE / 2
 
 /** Arc between two points on a vertical line, bulging left (`sweep` 0) or right (`sweep` 1). */
 const verticalArc = (x: number, fromY: number, toY: number, sweep: 0 | 1): string => {
@@ -64,16 +66,16 @@ export interface MoonGlyph {
   strokes: MoonStroke[]
 }
 
-const glyph = (letter: string, d: string | MoonStroke[], advance = LETTER_ADVANCE): MoonGlyph => ({
+const glyph = (letter: string, d: string | MoonStroke[]): MoonGlyph => ({
   letter,
-  advance,
+  advance: MOON_GLYPH_ADVANCE,
   strokes: typeof d === 'string' ? [{ d }] : d,
 })
 
 // The small circle of H, and its filled half. "Half filled" is the one description that does not
 // determine the drawing: which half is solid is not stated, so the left half is filled and recorded
 // here as an assumption rather than a reading of the source.
-const H_RADIUS = (BOTTOM - MIDDLE) / 1.6
+const H_RADIUS = RADIUS * 0.625
 const H_CENTER_X = CENTER
 const H_CENTER_Y = MIDDLE
 const circlePath = (cx: number, cy: number, r: number): string =>
@@ -135,9 +137,9 @@ const MOON_ALPHABET: Record<string, MoonGlyph> = {
   // "full circle"
   O: glyph('O', circlePath(CENTER, MIDDLE, RADIUS)),
   // "horizontal straight line with a small acute angle upwards at the left end"
-  P: glyph('P', `M${LEFT + RADIUS},${TOP}L${LEFT},${BOTTOM}L${RIGHT},${BOTTOM}`),
+  P: glyph('P', `M${CENTER},${MIDDLE}L${LEFT},${BOTTOM}L${RIGHT},${BOTTOM}`),
   // "horizontal straight line with a small acute angle upwards at the right end"
-  Q: glyph('Q', `M${LEFT},${BOTTOM}L${RIGHT},${BOTTOM}L${RIGHT - RADIUS},${TOP}`),
+  Q: glyph('Q', `M${LEFT},${BOTTOM}L${RIGHT},${BOTTOM}L${CENTER},${MIDDLE}`),
   // "oblique line from top left to bottom right"
   R: glyph('R', `M${LEFT},${TOP}L${RIGHT},${BOTTOM}`),
   // "oblique line from bottom left to top right"
@@ -145,11 +147,11 @@ const MOON_ALPHABET: Record<string, MoonGlyph> = {
   // "a horizontal straight line"
   T: glyph('T', `M${LEFT},${MIDDLE}L${RIGHT},${MIDDLE}`),
   // "semicircle, opening at the top"
-  U: glyph('U', horizontalArc(MIDDLE - WIDE_RADIUS / 2, LEFT, RIGHT, 0)),
+  U: glyph('U', horizontalArc(MIDDLE, LEFT, RIGHT, 0)),
   // "two straight lines form an upwardly open angle"
   V: glyph('V', `M${LEFT},${TOP}L${CENTER},${BOTTOM}L${RIGHT},${TOP}`),
   // "semicircle, opening at the bottom"
-  W: glyph('W', horizontalArc(MIDDLE + WIDE_RADIUS / 2, LEFT, RIGHT, 1)),
+  W: glyph('W', horizontalArc(MIDDLE, LEFT, RIGHT, 1)),
   // "two straight lines form an angle open to the left"
   X: glyph('X', `M${LEFT},${TOP}L${RIGHT},${MIDDLE}L${LEFT},${BOTTOM}`),
   // "vertical and horizontal lines form an angle open to the left above"

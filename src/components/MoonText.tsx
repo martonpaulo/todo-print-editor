@@ -7,10 +7,10 @@ import {
 } from '../domain/moon'
 
 /**
- * Cap height of a Moon word relative to the surrounding font size. Moon glyphs carry no ascenders or
- * descenders, so they are set slightly below the em box to sit like upper-case Latin text.
+ * Height of the complete Moon drawing band relative to the surrounding font size. The geometry is
+ * inset within the band, so a 0.9-em viewport gives the visible strokes a Latin-like cap height.
  */
-const CAP_HEIGHT_EM = 0.74
+const BAND_HEIGHT_EM = 0.9
 
 /**
  * Zero-width space. An `<svg>` is an atomic inline box, so no `overflow-wrap` or `word-break` value
@@ -27,7 +27,7 @@ const BREAK_OPPORTUNITY = '\u200b'
  * at the zero-width opportunities between its chunks.
  */
 const MoonWord = ({ segment }: { segment: MoonWordSegment }) => {
-  const width = (segment.advance / MOON_BAND_HEIGHT) * CAP_HEIGHT_EM
+  const width = (segment.advance / MOON_BAND_HEIGHT) * BAND_HEIGHT_EM
   // Each glyph is drawn at its own origin, so the word is composed by advancing along the baseline.
   const offsets = segment.glyphs.reduce<number[]>(
     (positions, glyph) => [...positions, positions[positions.length - 1] + glyph.advance],
@@ -40,7 +40,7 @@ const MoonWord = ({ segment }: { segment: MoonWordSegment }) => {
       className="moon-word"
       focusable="false"
       viewBox={`0 0 ${segment.advance} ${MOON_BAND_HEIGHT}`}
-      style={{ width: `${width}em`, height: `${CAP_HEIGHT_EM}em` }}
+      style={{ width: `${width}em`, height: `${BAND_HEIGHT_EM}em` }}
       preserveAspectRatio="xMidYMid meet"
     >
       {segment.glyphs.map((glyph, index) => (

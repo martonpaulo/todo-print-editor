@@ -165,12 +165,22 @@
   display: inline;
 }
 
+.moon-text {
+  /* One rhythm for list titles and tasks, independent of their Latin line-height. */
+  line-height: 1.24;
+}
+
+.moon-text__glyphs {
+  /* Plain-space fallback remains readable as a regular gap between monospaced glyph runs. */
+  word-spacing: 0.16em;
+}
+
 .moon-word {
   display: inline-block;
   /* Round stroke caps reach past the glyph band, and a clipped viewport would shave them off. */
   overflow: visible;
-  /* The band's bottom edge is the baseline, so no vertical offset is needed. */
-  vertical-align: baseline;
+  /* The frame is vertically centred in its band; lower the band so its ink sits on the baseline. */
+  vertical-align: -0.08em;
 }
 
 .print-task__text--checked {
@@ -328,4 +338,3 @@
     font: 12pt/1.5 var(--font-print);
   }
 }
-
