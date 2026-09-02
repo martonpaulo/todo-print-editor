@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { MOON_LETTERS, MOON_MAX_RUN_GLYPHS, getMoonGlyph, toMoonSegments } from './moon.ts'
+import {
+  MOON_BAND_HEIGHT,
+  MOON_LETTERS,
+  MOON_MAX_RUN_GLYPHS,
+  MOON_STROKE_WIDTH,
+  getMoonGlyph,
+  toMoonSegments,
+} from './moon.ts'
 
 const LATIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
@@ -20,6 +27,14 @@ describe('Moon type glyph table', () => {
         expect(stroke.d, `${letter} path`).toMatch(/^M[\d.]+,[\d.]+[ALZ]/)
       }
     }
+  })
+
+  it('uses one fixed-ratio monospaced cell and stroke weight for every letter', () => {
+    const glyphs = LATIN_ALPHABET.map((letter) => getMoonGlyph(letter)!)
+
+    expect(new Set(glyphs.map((glyph) => glyph.advance))).toHaveLength(1)
+    expect(glyphs[0].advance / MOON_BAND_HEIGHT).toBeCloseTo(0.88)
+    expect(MOON_STROKE_WIDTH / MOON_BAND_HEIGHT).toBeCloseTo(0.12)
   })
 
   it('is caseless, as Moon type has no upper and lower case', () => {
