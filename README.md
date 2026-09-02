@@ -74,7 +74,9 @@ current tab.
   **Undo removal** button. The button is an ordinary focusable control, so keyboard, pointer, and
   touch users all recover the same way.
 - Edits made less than 500 ms apart form one undo step, so typing is not undone character by
-  character. Any edit made after an undo discards the abandoned redo branch.
+  character. A removal is always its own step, so undoing it never discards a nearby edit and never
+  restores more than the status names. Any edit made after an undo discards the abandoned redo
+  branch.
 - History keeps at most the 100 most recent steps; recording beyond that drops the oldest one.
 - History lives in memory for this tab only. It is never stored, so reloading the page starts a new
   history over the saved document.

@@ -319,6 +319,81 @@ describe('App', () => {
     expect(screen.getByRole('region', { name: COPY.editorRegion })).toHaveFocus()
   })
 
+  it('reverses only the removal it names, not the edit just before it', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const secondTask = screen.getByRole('textbox', {
+      name: `${COPY.taskContext(2, COPY.starter.priorityItems[1])} in ${listContext}`,
+    })
+    await user.type(secondTask, '!')
+
+    // The removal follows the rename immediately, well inside the coalescing
+    // window. The status names one task, so its Undo must restore that task
+    // without discarding the text typed a moment earlier.
+    const removedTask = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(removedTask, listContext) }),
+    )
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    expect(
+      screen.getByRole('textbox', { name: `${removedTask} in ${listContext}` }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', {
+        name: `${COPY.taskContext(2, `${COPY.starter.priorityItems[1]}!`)} in ${listContext}`,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('restores one task per undo when two removals follow each other', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    // Tasks are named from their current position, so removing the first one
+    // renumbers the second before it is removed in turn.
+    const taskName = (position: number, text: string) =>
+      `${COPY.taskContext(position, text)} in ${listContext}`
+
+    await user.click(
+      screen.getByRole('button', {
+        name: COPY.removeTaskLabel(
+          COPY.taskContext(1, COPY.starter.priorityItems[0]),
+          listContext,
+        ),
+      }),
+    )
+    await user.click(
+      screen.getByRole('button', {
+        name: COPY.removeTaskLabel(
+          COPY.taskContext(1, COPY.starter.priorityItems[1]),
+          listContext,
+        ),
+      }),
+    )
+
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    // Only the removal the status named comes back; the first one stays undone.
+    expect(
+      screen.getByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[1]) }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[0]) }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(
+      screen.getByRole('textbox', { name: taskName(1, COPY.starter.priorityItems[0]) }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: taskName(2, COPY.starter.priorityItems[1]) }),
+    ).toBeInTheDocument()
+  })
+
   it('recovers a removed list through the same visible action', async () => {
     const user = userEvent.setup()
     render(<App />)

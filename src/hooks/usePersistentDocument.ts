@@ -8,7 +8,8 @@ export const STORAGE_KEY = 'todo-print-editor.document.v1'
 
 /**
  * Consecutive edits closer together than this merge into one history entry, so
- * typing a task title is one undo step rather than one per keystroke.
+ * typing a task title is one undo step rather than one per keystroke. An edit
+ * carrying a `DocumentEdit` description is exempt: see `setDocument`.
  */
 export const HISTORY_COALESCE_MS = 500
 
@@ -173,12 +174,19 @@ export const usePersistentDocument = () => {
   /**
    * Record a genuine edit. `edit` describes it only when the caller needs a
    * recovery affordance for it; any edit without one clears a stale description.
+   *
+   * A described edit is isolated into its own entry: it neither joins the
+   * preceding step nor accepts the following one into itself. The recovery
+   * action names one removal, so it must reverse exactly that removal — folding
+   * it into a neighbouring step by timing alone would discard whatever else that
+   * step contained, and would restore two removals from one that names one.
    */
   const setDocument = useCallback(
     (nextDocument: TodoDocument, edit: DocumentEdit | null = null) => {
       const now = Date.now()
       const openWindow = lastRecordedAt.current
-      const coalesces = openWindow !== null && now - openWindow < HISTORY_COALESCE_MS
+      const coalesces =
+        edit === null && openWindow !== null && now - openWindow < HISTORY_COALESCE_MS
 
       if (!coalesces) {
         history.current.past.push(documentRef.current)
@@ -190,7 +198,9 @@ export const usePersistentDocument = () => {
       // Unconditional, in both branches: an edit made a moment after an undo is
       // still a divergent edit, and the abandoned branch must not survive it.
       history.current.future = []
-      lastRecordedAt.current = now
+      // A described edit closes the window as well as starting a new entry, so
+      // the next edit cannot merge into the step the recovery action reverses.
+      lastRecordedAt.current = edit === null ? now : null
 
       // Undo is in-memory editor state, so it tracks every edit whether or not
       // the browser accepted the write.

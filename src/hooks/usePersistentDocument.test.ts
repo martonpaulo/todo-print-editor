@@ -348,6 +348,76 @@ describe('usePersistentDocument history', () => {
     expect(firstListTitle(result.current.document)).toBe('Edit 0')
   })
 
+  it('keeps a described edit out of the preceding coalesced step', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    editAfter(result, HISTORY_COALESCE_MS + 1, 'Renamed')
+    // The removal lands well inside the window the rename opened. Folding the
+    // two together would make one recovery action discard the rename as well.
+    vi.advanceTimersByTime(1)
+    act(() =>
+      result.current.setDocument(renamedFirstList(result.current.document, 'Renamed trimmed'), {
+        kind: 'task-removed',
+        subject: 'Task 1: Draft',
+      }),
+    )
+
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+
+    expect(firstListTitle(result.current.document)).toBe('Renamed')
+  })
+
+  it('gives each of two immediate removals its own undo step', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    const remove = (title: string, subject: string) => {
+      vi.advanceTimersByTime(1)
+      act(() =>
+        result.current.setDocument(renamedFirstList(result.current.document, title), {
+          kind: 'task-removed',
+          subject,
+        }),
+      )
+    }
+
+    remove('One removed', 'Task 1: One')
+    remove('Two removed', 'Task 2: Two')
+
+    // The status named only the second removal, so one undo reverses only it.
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+    expect(firstListTitle(result.current.document)).toBe('One removed')
+
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+    expect(firstListTitle(result.current.document)).not.toBe('One removed')
+  })
+
+  it('keeps the edit that follows a described one out of its step', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    vi.advanceTimersByTime(HISTORY_COALESCE_MS + 1)
+    act(() =>
+      result.current.setDocument(renamedFirstList(result.current.document, 'Removed'), {
+        kind: 'list-removed',
+        subject: 'List 2',
+      }),
+    )
+    // A described edit closes the window from both sides, so this quick edit
+    // cannot join the step the recovery action would reverse.
+    editAfter(result, 1, 'Typed after')
+
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+
+    expect(firstListTitle(result.current.document)).toBe('Removed')
+  })
+
   it('reports the removal an edit describes until the next transition', () => {
     const { result } = renderHook(() => usePersistentDocument())
 
