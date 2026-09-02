@@ -1,5 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="10" fill="#111"/>
-  <path d="M17 18h30v6H35v24h-6V24H17z" fill="#fff"/>
-  <path d="M42 31h6v17h-6z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Todo Print Editor">
+  <title>Todo Print Editor</title>
+  <!-- A4 landscape sheet split into three 99mm panels. Every edge is a multiple of 4 so the
+       mark lands on whole device pixels at 16, 32, and 64 px. -->
+  <rect width="64" height="64" rx="12" fill="#111111"/>
+  <g fill="#ffffff">
+    <rect x="4" y="12" width="16" height="40"/>
+    <rect x="24" y="12" width="16" height="40"/>
+    <rect x="44" y="12" width="16" height="40"/>
+  </g>
+  <g fill="#111111">
+    <rect x="8" y="16" width="8" height="4"/>
+    <rect x="8" y="28" width="8" height="4"/>
+    <rect x="8" y="40" width="8" height="4"/>
+    <rect x="28" y="16" width="8" height="4"/>
+    <rect x="28" y="28" width="8" height="4"/>
+    <rect x="28" y="40" width="8" height="4"/>
+    <rect x="48" y="16" width="8" height="4"/>
+    <rect x="48" y="28" width="8" height="4"/>
+    <rect x="48" y="40" width="8" height="4"/>
+  </g>
 </svg>
