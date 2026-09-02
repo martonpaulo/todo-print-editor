@@ -97,6 +97,8 @@ Tests cover Markdown conversion, persisted-data validation, and atomic paginatio
 
 Todo content is stored only in this browser under `localStorage`. The app has no backend, account system, analytics, or content API. Clearing site data removes the saved document.
 
+The editor states whether the document on screen is the one the browser holds. When a write is refused, the draft stays editable and is marked as not saved, so it can be copied out of the Markdown view before the tab closes. When stored content cannot be read, the editor shows a starter draft, saves nothing, and keeps the unreadable value until you choose to replace it.
+
 ## Deployment
 
 Pull requests run lint, tests, and a production build. A validated push to `main` uploads `dist/` and deploys it through GitHub Pages using the repository's native `GITHUB_TOKEN`.

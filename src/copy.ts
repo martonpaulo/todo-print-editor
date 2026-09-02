@@ -13,7 +13,22 @@ export const COPY = {
   appTagline: 'A calm workspace for paper plans.',
   localBadge: 'Local · private',
   savedLocally: 'Saved in this browser',
-  saveFailed: 'Could not save in this browser',
+  saveFailed: 'Not saved in this browser',
+  // A failed write leaves the only copy of the work in this tab, so the guidance
+  // names the two actions that keep it: do not close the tab, and take the
+  // Markdown out of the app.
+  saveFailedDescription:
+    'This browser refused to store your document. Keep this tab open, and copy your work from the Markdown view before closing it.',
+  // An invalid Markdown source is never parsed into the document, so what is on
+  // screen is newer than what is stored even though nothing failed.
+  draftNotSavedDescription:
+    'The Markdown source has errors, so this draft is not stored. Fix the errors, or copy the source, before closing the tab.',
+  loadFailedTitle: 'Could not read your saved document',
+  // The unreadable value is still the user's only stored copy, so the message
+  // says both that nothing is being saved and that nothing has been destroyed.
+  loadFailedDescription:
+    'The document stored in this browser is unreadable, so a starter document is shown instead. Nothing is being saved, and the stored content is kept until you replace it. Copy this draft from the Markdown view first if you want to keep it.',
+  replaceStoredDocument: 'Replace the stored document',
   visualMode: 'Visual',
   markdownMode: 'Markdown',
   editorMode: 'Editor mode',

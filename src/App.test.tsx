@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { COPY } from './copy'
+import { STORAGE_KEY } from './hooks/usePersistentDocument'
 
 // jsdom reports every box as zero, so the layout never finishes measuring and the
 // print action would keep its preparing label. Measured lists taller than a panel
@@ -154,6 +155,102 @@ describe('App', () => {
     expect(back).toHaveClass('narrow-only')
     // It lives in the preview pane, so it also has to stay out of print output.
     expect(back).toHaveClass('screen-only')
+  })
+
+  it('marks the document unsaved when the browser refuses the write, then clears it once a write succeeds', async () => {
+    const user = userEvent.setup()
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+
+    render(<App />)
+
+    const title = screen.getByRole('textbox', { name: `Title of List 1: ${COPY.starter.priorities}` })
+    await user.type(title, '!')
+
+    // The edit is still on screen, and the status says it is not stored.
+    expect(title).toHaveValue(`${COPY.starter.priorities}!`)
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.saveFailedDescription)).toBeInTheDocument()
+
+    setItem.mockRestore()
+    await user.type(title, '?')
+
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(screen.queryByText(COPY.saveFailedDescription)).not.toBeInTheDocument()
+  })
+
+  it('keeps unreadable stored content until the user replaces it explicitly', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(STORAGE_KEY, '{ not a document')
+
+    render(<App />)
+
+    // The preview's overflow banner is also an alert, so the recovery region is
+    // addressed by its own name.
+    expect(screen.getByRole('alert', { name: COPY.loadFailedTitle })).toHaveTextContent(
+      COPY.loadFailedDescription,
+    )
+
+    // Editing continues, but the unreadable value is the user's only stored copy.
+    const title = screen.getByRole('textbox', { name: `Title of List 1: ${COPY.starter.priorities}` })
+    await user.type(title, '!')
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('{ not a document')
+
+    await user.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+
+    expect(
+      screen.queryByRole('alert', { name: COPY.loadFailedTitle }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).blocks[0].title).toBe(
+      `${COPY.starter.priorities}!`,
+    )
+  })
+
+  it('stops claiming a save while an invalid Markdown draft is unparsed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: COPY.markdownMode }))
+    const source = screen.getByRole('textbox', { name: COPY.markdownLabel })
+    await user.type(source, '\n# not-a-date')
+
+    // The draft never reached the document, so storage cannot hold it.
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.draftNotSavedDescription)).toBeInTheDocument()
+
+    // Removing the invalid line lets the document accept the source again.
+    await user.clear(source)
+    await user.type(source, '## Kept list')
+
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(screen.queryByText(COPY.draftNotSavedDescription)).not.toBeInTheDocument()
+  })
+
+  it('restores a valid stored document without any recovery prompt', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        date: '2026-08-24',
+        showDate: true,
+        showPanelNumbers: true,
+        blocks: [
+          { id: 'list-1', kind: 'list', title: 'Restored', items: [] },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(
+      screen.queryByRole('alert', { name: COPY.loadFailedTitle }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(COPY.savedLocally)
+    expect(
+      screen.getByRole('textbox', { name: 'Title of List 1: Restored' }),
+    ).toHaveValue('Restored')
   })
 
 })
