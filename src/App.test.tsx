@@ -285,6 +285,119 @@ describe('App', () => {
     expect(screen.queryByText(COPY.draftNotSavedDescription)).not.toBeInTheDocument()
   })
 
+  it('recovers a removed task through the visible Undo action', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    expect(
+      screen.queryByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).not.toBeInTheDocument()
+
+    // The status names what was removed, and the recovery action sits with it
+    // rather than only behind a keyboard shortcut.
+    const undoAction = screen.getByRole('button', { name: COPY.undoRemoval })
+    expect(screen.getByText(COPY.removedTask(taskContext))).toBeInTheDocument()
+
+    // A pointer or touch user reaches the same control every keyboard user does.
+    undoAction.focus()
+    expect(undoAction).toHaveFocus()
+
+    await user.click(undoAction)
+
+    expect(
+      screen.getByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).toBeInTheDocument()
+    // The action disappears with the removal it reversed, so focus lands on the
+    // region the restored task is inside of instead of on the document body.
+    expect(screen.queryByRole('button', { name: COPY.undoRemoval })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: COPY.editorRegion })).toHaveFocus()
+  })
+
+  it('recovers a removed list through the same visible action', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    await user.click(screen.getByRole('button', { name: COPY.removeListLabel(listContext) }))
+
+    expect(screen.getByText(COPY.removedList(listContext))).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    expect(screen.getByRole('region', { name: listContext })).toBeInTheDocument()
+  })
+
+  it('undoes and redoes a removal from the keyboard outside a text field', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    const taskName = `${taskContext} in ${listContext}`
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    // A delayed undo must still work, and must leave the reverted document
+    // available to redo rather than consuming its own branch.
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true, shiftKey: true })
+    expect(screen.queryByRole('textbox', { name: taskName })).not.toBeInTheDocument()
+
+    // The redone document is not a new edit, so one more undo returns to the
+    // task rather than repeating the same step.
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+  })
+
+  it('leaves the shortcut to the browser while a text field is being edited', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+
+    const remainingTask = screen.getByRole('textbox', {
+      name: `${COPY.taskContext(1, COPY.starter.priorityItems[1])} in ${listContext}`,
+    })
+    fireEvent.keyDown(remainingTask, { key: 'z', ctrlKey: true })
+
+    // Native input undo owns the field; the document-level history stays put.
+    expect(
+      screen.queryByRole('textbox', { name: `${taskContext} in ${listContext}` }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('abandons the redo branch when an edit follows an undo', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
+    const taskName = `${taskContext} in ${listContext}`
+    await user.click(
+      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+    )
+    await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
+
+    // A divergent edit made immediately after the undo, inside the coalescing
+    // window, must not leave the abandoned removal reachable through redo.
+    await user.click(screen.getByRole('button', { name: COPY.addTaskLabel(listContext) }))
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true, shiftKey: true })
+
+    expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
+  })
+
   it('restores a valid stored document without any recovery prompt', () => {
     localStorage.setItem(
       STORAGE_KEY,

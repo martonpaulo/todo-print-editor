@@ -62,6 +62,23 @@ The supported subset is deliberately small:
 - `---` forces a new panel.
 - Unsupported lines are reported instead of silently discarded.
 
+### Undo and redo
+
+Structural edits, document settings, and Markdown commits share one document history for the
+current tab.
+
+- Press `Ctrl`/`Cmd` + `Z` to undo and `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl`/`Cmd` + `Y`) to redo.
+  While the cursor is inside a text field the browser's own text undo keeps the shortcut, so typing
+  is corrected where it happens.
+- Removing a task, a list, or a panel break shows a status naming what was removed, next to an
+  **Undo removal** button. The button is an ordinary focusable control, so keyboard, pointer, and
+  touch users all recover the same way.
+- Edits made less than 500 ms apart form one undo step, so typing is not undone character by
+  character. Any edit made after an undo discards the abandoned redo branch.
+- History keeps at most the 100 most recent steps; recording beyond that drops the oldest one.
+- History lives in memory for this tab only. It is never stored, so reloading the page starts a new
+  history over the saved document.
+
 ### Moon type
 
 **Moon type** in the toolbar redraws list titles and task text with the geometric alphabet William
@@ -125,6 +142,7 @@ Pull requests run lint, tests, and a production build. A validated push to `main
 
 - Only the documented Markdown subset round-trips to the visual model.
 - Content does not sync between browsers or devices.
+- Undo history is per tab, is not stored, and keeps at most 100 steps.
 - A single list cannot exceed one panel; shorten it before printing.
 - Editing stays inside one frame up to 25 lists of 10 tasks; larger documents keep working but feel progressively slower. See `docs/performance.md`.
 - Exact physical output depends on 100% print scale and printer-driver behavior.

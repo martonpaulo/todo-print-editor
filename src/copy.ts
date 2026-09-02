@@ -63,6 +63,11 @@ export const COPY = {
   panelBreak: 'New panel',
   panelBreakDescription: 'Everything below starts on a fresh 99 × 210 mm panel.',
   removePanelBreak: 'Remove panel break',
+  // Removal is the one editor action that destroys content in a single click,
+  // so it is announced with what was removed and paired with a recovery action
+  // that does not depend on knowing a keyboard shortcut.
+  undoRemoval: 'Undo removal',
+  removedPanelBreak: 'Panel break removed.',
   markdownLabel: 'Markdown source',
   markdownHelp:
     'Use ## for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
@@ -113,6 +118,9 @@ export const COPY = {
   moveListDownLabel: (list: string) => `Move ${list} down`,
   removeListLabel: (list: string) => `Remove ${list}`,
   addTaskLabel: (list: string) => `Add task to ${list}`,
+
+  removedTask: (task: string) => `${task} removed.`,
+  removedList: (list: string) => `${list} removed.`,
 
   taskTextLabel: (task: string, list: string) => `${task} in ${list}`,
   taskCompleteLabel: (task: string, list: string) => `Mark ${task} in ${list} complete`,
