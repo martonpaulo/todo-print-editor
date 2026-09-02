@@ -1,3 +1,4 @@
+import { isValidIsoDate } from './date'
 import type {
   DocumentBlock,
   ListBlock,
@@ -6,8 +7,6 @@ import type {
   TodoItem,
   Typography,
 } from './types'
-
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -53,7 +52,7 @@ export const decodeDocument = (value: unknown): TodoDocument | null => {
     !isRecord(value) ||
     value.version !== 1 ||
     typeof value.date !== 'string' ||
-    !ISO_DATE_PATTERN.test(value.date) ||
+    !isValidIsoDate(value.date) ||
     typeof value.showDate !== 'boolean' ||
     typeof value.showPanelNumbers !== 'boolean' ||
     !Array.isArray(value.blocks) ||
@@ -64,11 +63,6 @@ export const decodeDocument = (value: unknown): TodoDocument | null => {
 
   const typography = readTypography(value.typography)
   if (typography === null) return null
-
-  const parsedDate = new Date(`${value.date}T00:00:00Z`)
-  if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== value.date) {
-    return null
-  }
 
   const ids = new Set<string>()
   for (const block of value.blocks) {

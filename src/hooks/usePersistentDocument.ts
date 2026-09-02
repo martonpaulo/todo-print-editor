@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
-import { createStarterDocument } from '../domain/document'
+import { createStarterDocument } from '../starterDocument'
 import { decodeDocument } from '../domain/storage'
 import type { TodoDocument } from '../domain/types'
 import { recordProfileSample } from '../profiling'

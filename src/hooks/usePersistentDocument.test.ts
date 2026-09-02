@@ -6,7 +6,7 @@ import {
   STORAGE_KEY,
   usePersistentDocument,
 } from './usePersistentDocument'
-import { createStarterDocument } from '../domain/document'
+import { createStarterDocument } from '../starterDocument'
 
 const storedDocument = () => {
   const raw = window.localStorage.getItem(STORAGE_KEY)
