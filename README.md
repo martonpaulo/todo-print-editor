@@ -88,9 +88,10 @@ Moon published in 1845, on screen and in the printed page. It is a visual altern
 not an accessibility feature: the glyphs are vector outlines, not tactile relief.
 
 - The setting belongs to the document and is saved with it in this browser.
-- Moon type is caseless and defines a glyph for each of the 26 Latin letters. Characters it does not
-  cover — digits, punctuation, accented letters — keep their normal typeface, so dates and
-  quantities stay legible.
+- Moon type is caseless and defines a glyph for each of the 26 Latin letters. An accented letter is
+  drawn as its base letter, so `programação` reads as one Moon word. Characters it does not cover —
+  digits, punctuation, other scripts — keep their normal typeface, so dates and quantities stay
+  legible.
 - The editor's own input fields stay in the normal typeface, so the document remains editable.
 - The underlying text is unchanged, so screen readers and copied text still read the Latin original.
 

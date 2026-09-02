@@ -161,12 +161,35 @@ const MOON_ALPHABET: Record<string, MoonGlyph> = {
 export const MOON_LETTERS = Object.keys(MOON_ALPHABET)
 
 /**
+ * The combining marks canonical decomposition separates from an accented Latin letter — the block
+ * Unicode assigns to those accents. https://www.unicode.org/charts/PDF/U0300.pdf
+ */
+const COMBINING_MARKS = /[\u0300-\u036f]/gu
+
+/**
+ * The letter a character stands for once its accents are removed, so `ç` becomes `c` and `Ã` becomes
+ * `A`. Empty for a character that is nothing but a combining mark, and unchanged for one that does
+ * not decompose, such as `ø` or `ß`.
+ */
+const toBaseLetter = (character: string): string =>
+  character.normalize('NFD').replace(COMBINING_MARKS, '')
+
+/** True for a standalone accent, the shape an already-decomposed `é` arrives in. */
+const isCombiningMark = (character: string): boolean => toBaseLetter(character) === ''
+
+/**
  * The Moon glyph for one character, or `null` when Grade 1 defines none. Grade 1 is caseless and
  * covers only the 26 letters: its digits are the first ten letters behind a separate "number start"
  * marker, which this product does not use.
+ *
+ * It carries no accents either, so an accented letter is drawn as its base letter. That is the
+ * transliteration Moon readers use, and it is the only one that keeps a word such as `PROGRAMAÇÃO` a
+ * single run: without it, every accented letter would break the word into separate Moon and Latin
+ * pieces. A character that does not decompose to one of the 26, such as `ø` or a digit, still has no
+ * glyph and stays plain.
  */
 export const getMoonGlyph = (character: string): MoonGlyph | null =>
-  MOON_ALPHABET[character.toUpperCase()] ?? null
+  MOON_ALPHABET[toBaseLetter(character).toUpperCase()] ?? null
 
 /**
  * Longest run of letters emitted as one atomic `<svg>`.
@@ -249,7 +272,13 @@ export const toMoonSegments = (text: string): MoonSegment[] => {
   }
 
   for (const character of text) {
-    const isMoon = getMoonGlyph(character) !== null
+    // A combining mark inside a Moon run belongs to the letter before it: text in decomposed form
+    // spells `é` as `e` plus an accent, and letting the accent open a plain segment would fracture
+    // the word exactly as an unmapped accented letter used to. `toChunk` draws only what has a
+    // glyph, so the mark stays in the segment's source without being drawn.
+    const isMoon: boolean =
+      getMoonGlyph(character) !== null ||
+      (bufferIsMoon && buffer !== '' && isCombiningMark(character))
     if (buffer && isMoon !== bufferIsMoon) flush()
     bufferIsMoon = isMoon
     buffer += character

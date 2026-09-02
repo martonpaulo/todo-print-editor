@@ -38,7 +38,7 @@ Treat these values as stable project decisions. Change an established identifier
 - A printed page is A4 landscape (`297mm × 210mm`) containing three sequential `99mm × 210mm` panels.
 - A list is atomic during pagination. Move the whole list to the next panel when it does not fit; never split it. Block printing when one list cannot fit an otherwise empty panel.
 - Render the optional date only on the first panel. Render optional panel numbering on every panel.
-- Rendered list content honors the document's `typography` setting. Moon type draws the 26 Latin letters as the geometric glyphs owned by `src/domain/moon.ts`; every other character keeps its Latin form. Panel numbering, the date, and the editor's own inputs are never drawn in Moon type.
+- Rendered list content honors the document's `typography` setting. Moon type draws the 26 Latin letters as the geometric glyphs owned by `src/domain/moon.ts`, and an accented letter as the glyph of the base letter it canonically decomposes to; every other character keeps its Latin form. Panel numbering, the date, and the editor's own inputs are never drawn in Moon type.
 - Keep print output monochrome and preserve physical dimensions. Screen-only controls must not appear in print.
 - The supported browser family is Chromium. Print correctness is defined, verified, and accepted against Chromium only; no acceptance criterion, check, or contract may require Gecko or WebKit behaviour.
 
