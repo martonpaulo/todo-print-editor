@@ -4,6 +4,7 @@ import { COPY } from './copy'
 import { MarkdownEditor } from './components/MarkdownEditor'
 import { Icon } from './components/Icon'
 import { PrintPreview, type LayoutStatus } from './components/PrintPreview'
+import { StorageStatus } from './components/StorageStatus'
 import { VisualEditor } from './components/VisualEditor'
 import { listCardId } from './components/elementIds'
 import { parseMarkdown, serializeMarkdown } from './domain/markdown'
@@ -40,7 +41,8 @@ const INITIAL_LAYOUT_STATUS: LayoutStatus = {
 }
 
 const App = () => {
-  const { document, setDocument, undo, redo } = usePersistentDocument()
+  const { document, status: storageStatus, setDocument, replaceStoredDocument, undo, redo } =
+    usePersistentDocument()
   const [mode, setMode] = useState<EditorMode>('visual')
   const [markdown, setMarkdown] = useState(() => serializeMarkdown(document))
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
@@ -141,6 +143,11 @@ const App = () => {
           tabIndex={-1}
           aria-label={COPY.editorRegion}
         >
+          <StorageStatus
+            status={storageStatus}
+            onReplaceStoredDocument={replaceStoredDocument}
+          />
+
           <header className="document-toolbar screen-only" aria-label={COPY.documentSettings}>
             <div className="toolbar-group">
               <label className="toggle-control">
