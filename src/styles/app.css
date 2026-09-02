@@ -294,6 +294,11 @@ body,
 .panel-break-card__content,
 .editor-add-actions,
 .inline-message,
+.overflow-banner {
+  display: flex;
+  align-items: center;
+}
+
 /* The recovery action sits with the status that explains it, directly under the
    persistence line, so a removal and its undo are read as one sentence. */
 .removal-status {
@@ -312,11 +317,6 @@ body,
 
 .removal-status .text-button {
   margin-left: auto;
-}
-
-.overflow-banner {
-  display: flex;
-  align-items: center;
 }
 
 .list-card__header {
