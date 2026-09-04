@@ -69,6 +69,27 @@ export interface PrintPanelClamp {
   maxHeightMm: number
 }
 
+/**
+ * The band `AGENTS.md` records for a panel under `@media print`. Read from the contract for the same
+ * reason the paper size is: the allowance below the paper is a product decision (#34), so the check
+ * compares the stylesheet against the recorded sentence instead of against a number a test author
+ * chose.
+ */
+const PRINT_CLAMP_PATTERN =
+  /a printed panel is clamped to `(\d+(?:\.\d+)?)mm–(\d+(?:\.\d+)?)mm` tall/
+
+export const readRecordedPanelClamp = (): PrintPanelClamp => {
+  const match = PRINT_CLAMP_PATTERN.exec(readFileSync(AGENTS_PATH, 'utf8'))
+  if (!match) {
+    throw new Error(
+      `Could not find the printed-panel clamp in ${AGENTS_PATH}. ` +
+        'Update tests/print-geometry/contract.ts to match its current wording.',
+    )
+  }
+
+  return { minHeightMm: Number(match[1]), maxHeightMm: Number(match[2]) }
+}
+
 const PRINT_CSS_PATH = fileURLToPath(new URL('../../src/styles/print.css', import.meta.url))
 
 const PRINT_PANEL_RULE_PATTERN =

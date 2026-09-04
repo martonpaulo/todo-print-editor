@@ -4,10 +4,11 @@ import { createServer, type ViteDevServer } from 'vite'
 import { launchBrowser } from './browser'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
 import type { TodoDocument, Typography } from '../../src/domain/types'
-import { readPrintContract, readPrintPanelClamp } from './contract'
+import { readPrintContract, readPrintPanelClamp, readRecordedPanelClamp } from './contract'
 
 const contract = readPrintContract()
 const clamp = readPrintPanelClamp()
+const recordedClamp = readRecordedPanelClamp()
 
 /** CSS reference pixel, fixed by the CSS specification. */
 const PX_PER_INCH = 96
@@ -17,15 +18,6 @@ const MM_PER_INCH = 25.4
 
 /** Float slack for a measured millimetre, not a permitted geometric deviation. */
 const EPSILON_MM = 0.05
-
-/**
- * The `min-height` `src/styles/print.css` declares for a panel under `@media print`, pinned to the
- * exact figure recorded on #34. Not a tolerance and not a second contract: the recorded contract
- * says 210mm, this says what the stylesheet currently does instead, and the gap between them is the
- * open question #34 owns. Pinned rather than parsed-and-trusted so the declaration cannot move
- * without a test failing. Delete it when #34 lands.
- */
-const FLOOR_RECORDED_ON_34_MM = 209
 
 const pxToMm = (px: number): number => (px * MM_PER_INCH) / PX_PER_INCH
 
@@ -659,19 +651,16 @@ describe('printed page geometry', () => {
     expect(paper[0].heightMm).toBeCloseTo(contract.pageHeightMm, 0)
   })
 
-  it('declares the print-media panel clamp #34 recorded, and no other', () => {
-    // The ceiling is contract-owned: whatever the stylesheet declares, it may not let a panel grow
-    // past the paper.
-    expect(clamp.maxHeightMm).toBe(contract.panelHeightMm)
-
-    // The floor is pinned to the exact value #34 documents. This is not a permitted band — nothing
-    // here tolerates a range. It is a lock: the floor disagrees with the contract by 1mm today, and
-    // any movement in either direction fails, so the stylesheet cannot drift while the rendered box
-    // is checked against it. Deriving the accepted floor from the same declaration would be
-    // circular, passing for a panel collapsed to 1mm. When #34 lands, this value and the `fails`
-    // test below collapse into one contract assertion.
-    expect(clamp.minHeightMm).toBe(FLOOR_RECORDED_ON_34_MM)
-    expect(clamp.minHeightMm).toBeLessThanOrEqual(clamp.maxHeightMm)
+  it('declares exactly the print-media panel clamp the contract records', () => {
+    // Both ends come from `AGENTS.md`, so neither is a number this file chose. The ceiling is the
+    // paper; the floor is the whole-pixel allowance #34 settled, below the paper on purpose because
+    // Chromium fragments the sheet at 793px and a panel declared at the full height resolves above
+    // that. Deriving the accepted floor from the stylesheet itself would be circular — it would
+    // pass for a panel collapsed to 1mm — so the recorded sentence is the reference on both sides.
+    expect(clamp.maxHeightMm).toBe(recordedClamp.maxHeightMm)
+    expect(clamp.minHeightMm).toBe(recordedClamp.minHeightMm)
+    expect(recordedClamp.maxHeightMm).toBe(contract.panelHeightMm)
+    expect(recordedClamp.minHeightMm).toBeLessThan(recordedClamp.maxHeightMm)
   })
 
   it('keeps that geometry under print media, where the stylesheet overrides it', () => {
@@ -680,32 +669,23 @@ describe('printed page geometry', () => {
     expect(printMediaSheets[0].panels).toHaveLength(contract.panelsPerPage)
     expect(printMediaSheets[0].widthMm).toBeCloseTo(contract.pageWidthMm, 1)
 
-    // The rendered box must equal what the stylesheet declares, and the declaration itself is
-    // pinned above, so together these reject both a rendering regression and a silent edit to the
-    // clamp. Whether the declared floor may sit below the contract at all is #34's question.
+    // The rendered box must sit inside the recorded band and equal what the stylesheet declares, so
+    // together these reject a rendering regression, a silent edit to the clamp, and a band that
+    // drifted away from the contract. The paper is unaffected either way: it stays the recorded
+    // page height above, and the sheet-count assertions are what prove the allowance still keeps a
+    // document off a second sheet.
     printMediaSheets[0].panels.forEach((panel) => {
       expect(panel.heightMm).toBeCloseTo(clamp.minHeightMm, 1)
-      expect(panel.heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
+      expect(panel.heightMm).toBeGreaterThanOrEqual(recordedClamp.minHeightMm - EPSILON_MM)
+      expect(panel.heightMm).toBeLessThanOrEqual(recordedClamp.maxHeightMm + EPSILON_MM)
     })
     expect(printMediaSheets[0].heightMm).toBeCloseTo(clamp.minHeightMm, 1)
-    expect(printMediaSheets[0].heightMm).toBeLessThanOrEqual(clamp.maxHeightMm + EPSILON_MM)
+    expect(printMediaSheets[0].heightMm).toBeGreaterThanOrEqual(recordedClamp.minHeightMm - EPSILON_MM)
+    expect(printMediaSheets[0].heightMm).toBeLessThanOrEqual(recordedClamp.maxHeightMm + EPSILON_MM)
   })
 
   it('lifts the print emulation afterwards', () => {
     expect(sheetsAfterRestore[0].heightMm).toBeCloseTo(contract.pageHeightMm, 1)
-  })
-
-  /**
-   * The contract for the printed panel height. `print.css` clamps a panel to `min-height: 209mm`
-   * under `@media print`, so it renders 1mm short of the recorded 210mm while the paper stays
-   * 210mm. #34 owns whether the contract or the clamp is authoritative.
-   *
-   * Marked `fails` because it does not hold yet. The body is one pure comparison of two parsed
-   * numbers — there is no I/O to swallow, so the only thing it can report is that mismatch, and
-   * vitest fails the test the moment it stops mismatching.
-   */
-  it.fails('clamps a printed panel to the full recorded height (blocked by #34)', () => {
-    expect(clamp.minHeightMm).toBe(contract.panelHeightMm)
   })
 
   /**
