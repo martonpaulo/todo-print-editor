@@ -118,7 +118,7 @@ const persistUnlessUnreadable = (
  *
  * Two transition modes, and nothing else changes the document:
  *
- * - **record** (`setDocument`) is a genuine edit. It pushes the outgoing
+ * - **record** (`setDocument`, `replaceDocument`) is a genuine edit. It pushes the outgoing
  *   document onto `past` unless it falls inside the coalescing window, and
  *   always abandons `future`, so a divergent edit can never leave a redo branch
  *   that resurrects work the user moved away from.
@@ -172,21 +172,20 @@ export const usePersistentDocument = () => {
   }, [apply])
 
   /**
-   * Record a genuine edit. `edit` describes it only when the caller needs a
-   * recovery affordance for it; any edit without one clears a stale description.
+   * Record a genuine edit.
    *
-   * A described edit is isolated into its own entry: it neither joins the
-   * preceding step nor accepts the following one into itself. The recovery
-   * action names one removal, so it must reverse exactly that removal — folding
-   * it into a neighbouring step by timing alone would discard whatever else that
-   * step contained, and would restore two removals from one that names one.
+   * `isolated` gives the edit an entry of its own: it neither joins the
+   * preceding step nor accepts the following one into itself. Isolation is a
+   * property of the transition rather than of the description it carries,
+   * because a caller can need one without the other — a removal needs both, a
+   * whole-document replacement needs only the entry.
    */
-  const setDocument = useCallback(
-    (nextDocument: TodoDocument, edit: DocumentEdit | null = null) => {
+  const record = useCallback(
+    (nextDocument: TodoDocument, edit: DocumentEdit | null, isolated: boolean) => {
       const now = Date.now()
       const openWindow = lastRecordedAt.current
       const coalesces =
-        edit === null && openWindow !== null && now - openWindow < HISTORY_COALESCE_MS
+        !isolated && openWindow !== null && now - openWindow < HISTORY_COALESCE_MS
 
       if (!coalesces) {
         history.current.past.push(documentRef.current)
@@ -198,15 +197,44 @@ export const usePersistentDocument = () => {
       // Unconditional, in both branches: an edit made a moment after an undo is
       // still a divergent edit, and the abandoned branch must not survive it.
       history.current.future = []
-      // A described edit closes the window as well as starting a new entry, so
-      // the next edit cannot merge into the step the recovery action reverses.
-      lastRecordedAt.current = edit === null ? now : null
+      // An isolated edit closes the window as well as starting a new entry, so
+      // the next edit cannot merge into the step it occupies alone.
+      lastRecordedAt.current = isolated ? null : now
 
       // Undo is in-memory editor state, so it tracks every edit whether or not
       // the browser accepted the write.
       apply(nextDocument, persistUnlessUnreadable(nextDocument, statusRef.current), edit)
     },
     [apply],
+  )
+
+  /**
+   * An ordinary edit. `edit` describes it only when the caller needs a recovery
+   * affordance for it; any edit without one clears a stale description.
+   *
+   * A described edit is isolated. The recovery action names one removal, so it
+   * must reverse exactly that removal — folding it into a neighbouring step by
+   * timing alone would discard whatever else that step contained, and would
+   * restore two removals from one that names one.
+   */
+  const setDocument = useCallback(
+    (nextDocument: TodoDocument, edit: DocumentEdit | null = null) =>
+      record(nextDocument, edit, edit !== null),
+    [record],
+  )
+
+  /**
+   * Replace the whole document in one undo step, for a transition that is not a
+   * continuation of what the user was typing — reading a file over the
+   * document, for instance. Nothing is coalesced into it or out of it, so one
+   * undo restores exactly the document that was on screen before it.
+   *
+   * Distinct from `replaceStoredDocument` below, which writes the visible
+   * document over an unreadable stored value and changes no document at all.
+   */
+  const replaceDocument = useCallback(
+    (nextDocument: TodoDocument) => record(nextDocument, null, true),
+    [record],
   )
 
   /**
@@ -244,5 +272,5 @@ export const usePersistentDocument = () => {
     [traverse],
   )
 
-  return { ...state, setDocument, replaceStoredDocument, undo, redo }
+  return { ...state, setDocument, replaceDocument, replaceStoredDocument, undo, redo }
 }

@@ -418,6 +418,54 @@ describe('usePersistentDocument history', () => {
     expect(firstListTitle(result.current.document)).toBe('Removed')
   })
 
+  it('keeps a replacement out of the step the edit just before it opened', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    editAfter(result, HISTORY_COALESCE_MS + 1, 'Typed before')
+    // The replacement lands well inside the window that keystroke opened.
+    vi.advanceTimersByTime(1)
+    act(() => result.current.replaceDocument(renamedFirstList(result.current.document, 'Imported')))
+
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+
+    expect(firstListTitle(result.current.document)).toBe('Typed before')
+  })
+
+  it('keeps the edit that follows a replacement out of its step', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    vi.advanceTimersByTime(HISTORY_COALESCE_MS + 1)
+    act(() => result.current.replaceDocument(renamedFirstList(result.current.document, 'Imported')))
+    // A replacement closes the window from both sides, so this quick keystroke
+    // cannot join the step one undo is expected to reverse.
+    editAfter(result, 1, 'Typed after')
+
+    act(() => {
+      expect(result.current.undo()).toBe(true)
+    })
+
+    expect(firstListTitle(result.current.document)).toBe('Imported')
+  })
+
+  it('describes no removal for a replacement, so no recovery action is offered', () => {
+    const { result } = renderHook(() => usePersistentDocument())
+
+    vi.advanceTimersByTime(HISTORY_COALESCE_MS + 1)
+    act(() =>
+      result.current.setDocument(renamedFirstList(result.current.document, 'Trimmed'), {
+        kind: 'task-removed',
+        subject: 'Task 1: Draft',
+      }),
+    )
+    expect(result.current.lastEdit).not.toBeNull()
+
+    act(() => result.current.replaceDocument(renamedFirstList(result.current.document, 'Imported')))
+
+    expect(result.current.lastEdit).toBeNull()
+  })
+
   it('reports the removal an edit describes until the next transition', () => {
     const { result } = renderHook(() => usePersistentDocument())
 

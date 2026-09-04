@@ -546,6 +546,44 @@ describe('App', () => {
     ])
   })
 
+  it('gives an import its own undo step even when edits surround it in the same instant', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    // Freezing the clock holds the history's coalescing window open for every
+    // transition below, so nothing here can pass merely by being slow.
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
+    const listContext = COPY.listContext(1, COPY.starter.priorities)
+    fireEvent.change(screen.getByRole('textbox', { name: `Title of ${listContext}` }), {
+      target: { value: 'Typed before' },
+    })
+
+    await user.upload(
+      screen.getByLabelText(COPY.importMarkdown),
+      new File(['## Imported\n- [ ] From a file\n'], 'todo.md', { type: 'text/markdown' }),
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title of List 1: Imported' }), {
+      target: { value: 'Typed after' },
+    })
+
+    const titles = () =>
+      screen.getAllByRole('textbox', { name: /^Title of / }).map((i) => (i as HTMLInputElement).value)
+
+    // One undo per step: the keystroke after the import, then the import alone.
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(titles()).toEqual(['Imported'])
+
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(titles()).toEqual([
+      'Typed before',
+      COPY.starter.smallWins,
+      COPY.starter.work,
+      COPY.starter.personal,
+    ])
+  })
+
   it('keeps the document unchanged when the imported Markdown has errors', async () => {
     const user = userEvent.setup()
 

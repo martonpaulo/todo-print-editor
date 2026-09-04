@@ -80,6 +80,7 @@ const App = () => {
     status: storageStatus,
     lastEdit,
     setDocument,
+    replaceDocument,
     replaceStoredDocument,
     undo,
     redo,
@@ -149,7 +150,10 @@ const App = () => {
   }
 
   // An import is an ordinary Markdown change: the same parse decides whether the document is
-  // replaced, so a file can never put content into the document that typing could not.
+  // replaced, so a file can never put content into the document that typing could not. It is not
+  // a continuation of what the user was typing, though, so it takes an undo step of its own: the
+  // control promises that undo restores what was here, and a neighbouring keystroke coalesced
+  // into the same step would restore more than that.
   const importMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target
     const file = input.files?.[0]
@@ -176,7 +180,7 @@ const App = () => {
     }
 
     setImportFailure(null)
-    setDocument(result.document)
+    replaceDocument(result.document)
   }
 
   const changeMode = (nextMode: EditorMode) => {
