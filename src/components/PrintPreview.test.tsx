@@ -175,6 +175,21 @@ describe('PrintPreview zoom', () => {
     expect(zoomOut).toBeDisabled()
   })
 
+  it('reaches every control by keyboard alone', async () => {
+    const user = userEvent.setup()
+    renderPreview()
+
+    screen.getByRole('button', { name: COPY.zoomOut }).focus()
+    await user.keyboard('{Tab}')
+    expect(screen.getByRole('button', { name: COPY.zoomIn })).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(zoomLevel()).toContain(COPY.zoomLevel(125))
+
+    await user.keyboard('{Tab}{Enter}')
+    expect(zoomLevel()).toContain(COPY.zoomLevel(100))
+  })
+
   it('keeps the controls off the paper', () => {
     const { container } = renderPreview()
 

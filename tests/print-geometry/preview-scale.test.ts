@@ -269,6 +269,22 @@ describe('preview scaling', () => {
 
       await page.emulateMediaType('print')
       try {
+        // `emulateMediaType` resolves before the print stylesheet is necessarily in force, and a
+        // computed style read in that window still reports the screen transform. Waiting for the
+        // rule to land keeps the assertions below reporting the product rather than the race.
+        await page
+          .waitForFunction(
+            () => {
+              const sheet = window.document.querySelector('.print-page')
+              return (
+                sheet instanceof HTMLElement &&
+                window.getComputedStyle(sheet).transform === 'none'
+              )
+            },
+            { timeout: 10_000 },
+          )
+          .catch(() => {})
+
         const printed = await page.evaluate(() => {
           const controls = window.document.querySelector('.preview-zoom')
           const sheet = window.document.querySelector('.print-page')
