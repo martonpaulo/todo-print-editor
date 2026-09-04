@@ -852,6 +852,7 @@ body,
     flex-direction: column;
   }
 
+  .date-control,
   .date-control input,
   .primary-button {
     width: 100%;
@@ -864,14 +865,4 @@ body,
   .preview-zoom {
     padding-inline: var(--space-3);
   }
-}
-
-.document-toolbar .mode-switcher,
-.document-toolbar .primary-button,
-.document-toolbar .date-control input {
-  width: 100%;
-}
-
-.document-toolbar .date-control {
-  width: 100%;
 }
