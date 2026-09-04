@@ -496,6 +496,58 @@ describe('App', () => {
     expect(exportButton.closest('.screen-only')).not.toBeNull()
   })
 
+  it('exports the draft on screen, not the older document behind an invalid one', async () => {
+    const user = userEvent.setup()
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob)
+        return 'blob:document'
+      }),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: COPY.markdownMode }))
+    fireEvent.change(screen.getByLabelText(COPY.markdownLabel), {
+      target: { value: '### Personal\n- [ ] Call someone' },
+    })
+
+    // The canonical document is deliberately still the last valid one, so exporting it would
+    // hand back work older than what is on screen — the very copy the storage guidance tells the
+    // user to take out of the app before closing the tab.
+    expect(screen.getByText(COPY.markdownErrorLine(1, 'unsupported-heading'))).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: COPY.exportMarkdown }))
+
+    await expect(blobs[0].text()).resolves.toBe('### Personal\n- [ ] Call someone\n')
+  })
+
+  it('exports a valid but non-canonical source exactly as the editor shows it', async () => {
+    const user = userEvent.setup()
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob)
+        return 'blob:document'
+      }),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: COPY.markdownMode }))
+    fireEvent.change(screen.getByLabelText(COPY.markdownLabel), {
+      target: { value: '## Today\n* [X] Send it' },
+    })
+
+    await user.click(screen.getByRole('button', { name: COPY.exportMarkdown }))
+
+    await expect(blobs[0].text()).resolves.toBe('## Today\n* [X] Send it\n')
+  })
+
   it('exports the document even while an oversized list blocks printing', async () => {
     const user = userEvent.setup()
     stubLayout({ listHeight: 2000, panelHeight: 900 })

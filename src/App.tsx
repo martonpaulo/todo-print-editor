@@ -141,12 +141,13 @@ const App = () => {
     if (result.errors.length === 0) setDocument(result.document)
   }
 
+  // The file is the source the Markdown view shows, not a fresh serialization of the document.
+  // While a draft has errors the document is deliberately the last valid one, so writing it would
+  // hand back an older file than the work on screen — which is the copy the storage guidance tells
+  // the user to take out of the app. `markdown` tracks the document whenever the source parses, so
+  // exporting from the visual editor is unaffected.
   const exportMarkdown = () => {
-    downloadTextFile(
-      markdownFileName(document),
-      markdownFileContent(document),
-      MARKDOWN_MIME_TYPE,
-    )
+    downloadTextFile(markdownFileName(document), markdownFileContent(markdown), MARKDOWN_MIME_TYPE)
   }
 
   // An import is an ordinary Markdown change: the same parse decides whether the document is

@@ -119,7 +119,9 @@ clipped page.
 ### Markdown files
 
 **Export Markdown** downloads the document as `todo-<date>.md`, holding exactly the source the
-Markdown view shows. **Import Markdown** reads such a file back and replaces the current document;
+Markdown view shows — including a draft the parser rejects, which is the copy the storage guidance
+tells you to take out of the app, and including a valid source written non-canonically, which is
+never rewritten on the way out. **Import Markdown** reads such a file back and replaces the current document;
 the replacement is one undo step. A file whose Markdown does not parse changes nothing: its source
 opens in the Markdown view with the numbered errors that reject it.
 

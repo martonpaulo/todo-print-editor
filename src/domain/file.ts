@@ -1,4 +1,3 @@
-import { serializeMarkdown } from './markdown'
 import type { TodoDocument } from './types'
 
 /**
@@ -26,11 +25,16 @@ export const MARKDOWN_FILE_ACCEPT = '.md,text/markdown'
  */
 export const markdownFileName = (document: TodoDocument): string => `todo-${document.date}.md`
 
-/** The exported bytes: the editor's own Markdown source, newline-terminated as text files are. */
-export const markdownFileContent = (document: TodoDocument): string => {
-  const source = serializeMarkdown(document)
-  return source ? `${source}\n` : ''
-}
+/**
+ * The exported bytes: the Markdown source the editor is showing, newline-terminated as text files
+ * are. The source is taken verbatim rather than re-serialized from the document, because the two
+ * can differ and the file must be the work the user is looking at. They differ while a draft has
+ * errors — the document is then deliberately the last valid one, and re-serializing would write a
+ * file the user never wrote — and they differ for a valid source written non-canonically, where
+ * re-serializing would silently rewrite it.
+ */
+export const markdownFileContent = (source: string): string =>
+  source === '' || source.endsWith('\n') ? source : `${source}\n`
 
 /**
  * Hands the text to the browser as a download. The object URL owns a copy of the blob until it is

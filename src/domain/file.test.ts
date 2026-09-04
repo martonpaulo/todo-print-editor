@@ -6,7 +6,7 @@ import {
   markdownFileName,
   readTextFile,
 } from './file'
-import { parseMarkdown } from './markdown'
+import { parseMarkdown, serializeMarkdown } from './markdown'
 import type { TodoDocument } from './types'
 
 const document: TodoDocument = {
@@ -39,19 +39,37 @@ describe('markdownFileName', () => {
 })
 
 describe('markdownFileContent', () => {
-  it('writes the editor source, terminated by a newline', () => {
-    expect(markdownFileContent(document)).toBe(
+  it('terminates the source with a newline, as text files are', () => {
+    expect(markdownFileContent(serializeMarkdown(document))).toBe(
       '# 2026-08-24\n\n## Today\n- [ ] Write the draft\n- [x] Send it\n',
     )
   })
 
-  it('writes nothing for an empty document rather than a lone newline', () => {
-    expect(markdownFileContent({ ...document, showDate: false, blocks: [] })).toBe('')
+  it('adds no second newline to a source that already ends in one', () => {
+    expect(markdownFileContent('## Today\n')).toBe('## Today\n')
+  })
+
+  it('writes nothing for an empty source rather than a lone newline', () => {
+    expect(markdownFileContent('')).toBe('')
+  })
+
+  // The file is the work on screen. A source the editor accepts but would have written
+  // differently must survive byte for byte, rather than being rewritten on the way out.
+  it('writes a valid but non-canonical source exactly as it stands', () => {
+    expect(markdownFileContent('## Today\n* [X] Send it')).toBe('## Today\n* [X] Send it\n')
+  })
+
+  // While a draft has errors the document is deliberately the last valid one, so the file must
+  // come from the source instead: writing the document would hand back older work.
+  it('writes a source the parser rejects, unchanged', () => {
+    const invalid = '### Personal\n- [ ] Call someone'
+    expect(parseMarkdown(invalid, document).errors).not.toEqual([])
+    expect(markdownFileContent(invalid)).toBe('### Personal\n- [ ] Call someone\n')
   })
 
   it('parses back into the same document it was written from', () => {
     const { document: reparsed, errors } = parseMarkdown(
-      markdownFileContent(document),
+      markdownFileContent(serializeMarkdown(document)),
       document,
     )
 
