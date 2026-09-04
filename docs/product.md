@@ -19,6 +19,7 @@ Create reusable todo lists quickly, see exactly how they will flow onto paper, a
 - Shows an optional `en-US` date on the first panel and optional numbering on every panel.
 - Saves the document only in the current browser and restores it after reload.
 - Opens the browser print dialog with print CSS for A4 landscape, zero page margins, and physical millimeter dimensions.
+- Offers an opt-in rotation that images the same landscape sheet a quarter turn onto portrait paper, for printers that rotate or rescale landscape output on their own. The layout, its three panels and their sizes are unchanged; only the paper the sheet is printed onto turns.
 
 ## Non-goals
 
