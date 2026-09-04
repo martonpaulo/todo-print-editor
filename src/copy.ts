@@ -74,6 +74,13 @@ export const COPY = {
   editorRegion: 'Editor',
   previewTitle: 'Print preview',
   previewRegion: 'Preview',
+  // Zoom is a way of looking at the same rendered sheet: it never reaches the paper, the measured
+  // capacities, or the pagination. The controls therefore speak about the view, and “fit” names the
+  // width-filling scale the preview starts from rather than an absolute paper size.
+  previewZoom: 'Preview zoom',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  resetZoom: 'Reset to fit',
   addList: 'Add list',
   addPanel: 'Add panel',
   addTask: 'Add task',
@@ -129,6 +136,10 @@ export const COPY = {
     personal: 'Personal',
     personalItems: ['Pick up groceries', 'Take a proper break', 'Call someone you miss'],
   },
+  // The readout is a bare percentage: it is read inside the “Preview zoom” group, which already
+  // says what the number measures.
+  zoomLevel: (percent: number) => `${percent}%`,
+
   listNumber: (number: number, total: number) => `List ${number} / ${total}`,
   panelNumber: (current: number, total: number) => `Panel ${current} / ${total}`,
 

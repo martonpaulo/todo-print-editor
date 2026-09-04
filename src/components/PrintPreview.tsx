@@ -1,7 +1,8 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { COPY } from '../copy'
 import { groupPanelsIntoPages, PANELS_PER_PAGE, paginateBlocks } from '../domain/pagination'
 import { recordProfileSample } from '../profiling'
+import { Icon } from './Icon'
 import { MoonText } from './MoonText'
 import type { ListBlock, TodoDocument, Typography } from '../domain/types'
 
@@ -354,9 +355,77 @@ const usePreviewMetrics = () => {
   return { stageRef, pageRef, metrics }
 }
 
+/**
+ * Zoom multiplies the fit-to-width scale rather than replacing it, so `1` is always the sheet the
+ * preview opens on whatever the stage is wide, and the bounds read as halving and doubling that
+ * view. The ladder is additive so every reachable step is a whole quarter — 50%, 75%, … 200% — which
+ * a repeated multiplication would not give.
+ */
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 2
+const ZOOM_STEP = 0.25
+const ZOOM_FIT = 1
+
+const clampZoom = (zoom: number): number =>
+  Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(zoom / ZOOM_STEP) * ZOOM_STEP))
+
+interface PreviewZoomControlsProps {
+  zoom: number
+  /** Clamps to the ladder, so a control passes the step it wants and never a bounded value. */
+  onZoomChange: (zoom: number) => void
+}
+
+/**
+ * Screen-only: zoom is a property of looking at the preview, and the printed sheet carries no
+ * control. It changes nothing the pagination measures, so it lives here beside the stage rather
+ * than in the document settings the paper does follow.
+ */
+const PreviewZoomControls = ({ zoom, onZoomChange }: PreviewZoomControlsProps) => {
+  const percent = Math.round(zoom * 100)
+
+  return (
+    <div className="preview-zoom screen-only" role="group" aria-label={COPY.previewZoom}>
+      <button
+        className="icon-button"
+        type="button"
+        onClick={() => onZoomChange(zoom - ZOOM_STEP)}
+        disabled={zoom <= ZOOM_MIN}
+        aria-label={COPY.zoomOut}
+        title={COPY.zoomOut}
+      >
+        <Icon name="zoom-out" size={16} />
+      </button>
+      {/* Static text, not a live region: the group already names what the number measures, and a
+          zoom step is a change the user just made rather than an event to announce over their
+          work. */}
+      <span className="preview-zoom__level">{COPY.zoomLevel(percent)}</span>
+      <button
+        className="icon-button"
+        type="button"
+        onClick={() => onZoomChange(zoom + ZOOM_STEP)}
+        disabled={zoom >= ZOOM_MAX}
+        aria-label={COPY.zoomIn}
+        title={COPY.zoomIn}
+      >
+        <Icon name="zoom-in" size={16} />
+      </button>
+      <button
+        className="preview-zoom__reset"
+        type="button"
+        onClick={() => onZoomChange(ZOOM_FIT)}
+        disabled={zoom === ZOOM_FIT}
+      >
+        {COPY.resetZoom}
+      </button>
+    </div>
+  )
+}
+
 export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewProps) => {
   const { rootRef, measurements } = usePrintMeasurements(document)
   const { stageRef, pageRef, metrics } = usePreviewMetrics()
+  const [zoom, setZoom] = useState(ZOOM_FIT)
+  const changeZoom = useCallback((next: number) => setZoom(clampZoom(next)), [])
 
   const layout = useMemo(
     () =>
@@ -383,14 +452,19 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
 
   // Every sheet is the same paper, so the shell only mirrors the one measured page box; its size
   // and its three columns come from the print tokens in the stylesheet, never from arithmetic here.
-  const shellStyle = metrics
-    ? { width: `${metrics.width * metrics.scale}px`, height: `${metrics.height * metrics.scale}px` }
-    : undefined
-  const pageStyle = metrics ? { transform: `scale(${metrics.scale})` } : undefined
+  // The fit scale and the user's zoom compose into the one number both the shell and the sheet use,
+  // which keeps the reserved space and the drawn sheet the same size at every zoom level.
+  const viewScale = metrics ? metrics.scale * zoom : null
+  const shellStyle =
+    metrics && viewScale !== null
+      ? { width: `${metrics.width * viewScale}px`, height: `${metrics.height * viewScale}px` }
+      : undefined
+  const pageStyle = viewScale !== null ? { transform: `scale(${viewScale})` } : undefined
 
   return (
     <>
       <MeasurementLayer document={document} rootRef={rootRef} />
+      <PreviewZoomControls zoom={zoom} onZoomChange={changeZoom} />
       <div className="preview-stage" ref={stageRef}>
         <div className="print-pages" aria-label={COPY.previewTitle}>
           {pages.map((slots, pageIndex) => (
