@@ -25,15 +25,30 @@ export const StorageStatus = ({
 }: StorageStatusProps) => {
   const recoveryRef = useRef<HTMLDivElement | null>(null)
   const replaceRef = useRef<HTMLButtonElement | null>(null)
+  const stateRef = useRef<HTMLParagraphElement | null>(null)
   // Replacing the stored document destroys the only copy of it, so the action
   // asks in place before it runs.
   const [confirmingReplace, setConfirmingReplace] = useState(false)
+  // A completed replacement leaves the load-failed state, which unmounts the
+  // whole recovery region along with the button that was holding focus. The
+  // flag survives that render so the next one can hand focus on.
+  const [awaitingReplacement, setAwaitingReplacement] = useState(false)
 
   // A load failure is the one state the user must act on before the document is
   // stored again, so the recovery region takes focus once, when it appears.
   useEffect(() => {
     if (status === 'load-failed') recoveryRef.current?.focus()
   }, [status])
+
+  // The state line is the answer to the action the user just took, and it is
+  // the one element that outlives the region the action was in. A replacement
+  // that somehow left the failure in place keeps its own control instead.
+  useEffect(() => {
+    if (!awaitingReplacement) return
+    setAwaitingReplacement(false)
+    if (status === 'load-failed') replaceRef.current?.focus()
+    else stateRef.current?.focus()
+  }, [awaitingReplacement, status])
 
   // Nothing has been written yet, so there is nothing to claim in either
   // direction; the first write settles it within the same mount.
@@ -48,8 +63,12 @@ export const StorageStatus = ({
       {/* The text changes only when persistence changes, so the polite live
           region stays silent while the user types. */}
       <p
+        ref={stateRef}
         className={`storage-status__state${saved ? '' : ' storage-status__state--failed'}`}
         role="status"
+        // Not a tab stop; it only accepts the focus handed to it when the
+        // recovery region it replaces is removed.
+        tabIndex={-1}
       >
         <Icon name={saved ? 'check' : 'warning'} size={16} />
         <span>{saved ? COPY.savedLocally : COPY.saveFailed}</span>
@@ -94,6 +113,7 @@ export const StorageStatus = ({
                   autoFocus
                   onClick={() => {
                     setConfirmingReplace(false)
+                    setAwaitingReplacement(true)
                     onReplaceStoredDocument()
                   }}
                 >
