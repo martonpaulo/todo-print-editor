@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
-import { launchBrowser } from './browser'
+import { launchBrowser, waitForPrintMedia } from './browser'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
 import type { TodoDocument, Typography } from '../../src/domain/types'
 import { readPrintContract, readPrintPanelClamp, readRecordedPanelClamp } from './contract'
@@ -439,6 +439,8 @@ describe('printed page geometry', () => {
     await render(appUrl, contract.panelsPerPage)
     await page.emulateMediaType('print')
     try {
+      await waitForPrintMedia(page)
+
       printMediaSheets = await measureSheets()
     } finally {
       // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
@@ -452,6 +454,8 @@ describe('printed page geometry', () => {
     await render(appUrl, contract.panelsPerPage, 'moon')
     await page.emulateMediaType('print')
     try {
+      await waitForPrintMedia(page)
+
       moonGlyphsUnderPrintMedia = await page.evaluate(
         () => window.document.querySelectorAll('.print-panel .moon-word').length,
       )

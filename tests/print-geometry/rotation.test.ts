@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
-import { launchBrowser } from './browser'
+import { launchBrowser, waitForPrintMedia } from './browser'
 import { STORAGE_KEY } from '../../src/hooks/usePersistentDocument'
 import type { TodoDocument } from '../../src/domain/types'
 import { readPrintContract, readRecordedPanelClamp } from './contract'
@@ -174,6 +174,8 @@ describe('rotated print geometry', () => {
     rotatedPaper = await measurePrintedPaper()
     await page.emulateMediaType('print')
     try {
+      await waitForPrintMedia(page)
+
       rotatedSheet = await measureSheet()
     } finally {
       // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import puppeteer, { type Browser } from 'puppeteer'
+import puppeteer, { type Browser, type Page } from 'puppeteer'
 
 /**
  * The one Chromium launch every browser check in this directory shares. Chromium is the only
@@ -23,4 +23,41 @@ export const launchBrowser = async (): Promise<Browser> => {
   }
 
   return await puppeteer.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+}
+
+/**
+ * Block until Chromium has actually applied the print stylesheet.
+ *
+ * `page.emulateMediaType('print')` resolves before the print rules are necessarily in force, so a
+ * computed style or a bounding box read straight after it can still report the screen layout. That
+ * window is narrow enough to pass most runs and fail one, which is how a correct change gets a red
+ * `validate` and a green rerun on the same commit.
+ *
+ * The condition is `.screen-only` reporting `display: none`, declared by `@media print` in
+ * src/styles/print.css and by no screen rule. Two properties matter, and both are deliberate:
+ *
+ * It is independent of viewport, zoom, typography and the rotation setting, so one helper serves
+ * every call site. The obvious alternative -- waiting for `.print-page` to report
+ * `transform: none`, which is what preview-scale.test.ts does -- works only where the preview is
+ * scaled on screen. geometry.test.ts measures at 2600px, where the sheet already fits unscaled and
+ * that transform is already `none`, so the same wait would return immediately and guard nothing.
+ *
+ * And it is never a value a caller asserts. It observes the media switch, not the sheet geometry,
+ * the panel offsets, the glyph count or the paper size, so no wrong print contract can satisfy it.
+ *
+ * The timeout is swallowed on purpose: a real regression must arrive as the failed expectation that
+ * follows, with its actual and expected values, rather than as a bare timeout naming nothing.
+ */
+export const waitForPrintMedia = async (page: Page): Promise<void> => {
+  await page
+    .waitForFunction(
+      () => {
+        const screenOnly = window.document.querySelector('.screen-only')
+        return (
+          screenOnly instanceof HTMLElement && window.getComputedStyle(screenOnly).display === 'none'
+        )
+      },
+      { timeout: 10_000 },
+    )
+    .catch(() => {})
 }
