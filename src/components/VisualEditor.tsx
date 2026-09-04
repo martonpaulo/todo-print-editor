@@ -37,6 +37,10 @@ type PendingRemoval = { kind: 'list' | 'task'; id: string }
 
 const removeControlId = ({ kind, id }: PendingRemoval) => `remove-${kind}-${id}`
 
+// Removing the last list leaves nothing in the stack to hold focus, so the
+// action that rebuilds one is the landing point.
+const ADD_LIST_ID = 'add-list'
+
 export const VisualEditor = ({
   document,
   overflowListIds,
@@ -77,6 +81,19 @@ export const VisualEditor = ({
   const deleteItem = (listId: string, itemId: string, subject: string, focusId?: string) => {
     apply(removeItem(document, listId, itemId), { kind: 'task-removed', subject })
     focusElement(focusId ? `item-${focusId}` : `add-task-${listId}`)
+  }
+
+  // A confirmed removal unmounts the button that was holding focus, so the
+  // caret lands on the neighbouring list the way a removed task lands on its
+  // neighbouring row. Only lists carry a title field, so the panel breaks
+  // between them are not candidates.
+  const deleteList = (blockId: string, subject: string) => {
+    const lists = document.blocks.filter((block) => block.kind === 'list')
+    const removedIndex = lists.findIndex((block) => block.id === blockId)
+    const neighbour = lists[removedIndex + 1] ?? lists[removedIndex - 1]
+
+    apply(removeBlock(document, blockId), { kind: 'list-removed', subject })
+    focusElement(neighbour ? `title-${neighbour.id}` : ADD_LIST_ID)
   }
 
   const listNumbers = new Map(
@@ -145,12 +162,7 @@ export const VisualEditor = ({
                         // focus follows it rather than falling to the body.
                         autoFocus
                         aria-label={COPY.confirmRemoveListLabel(listContext)}
-                        onClick={() =>
-                          apply(removeBlock(document, block.id), {
-                            kind: 'list-removed',
-                            subject: listContext,
-                          })
-                        }
+                        onClick={() => deleteList(block.id, listContext)}
                       >
                         {COPY.confirmRemoval}
                       </button>
@@ -354,6 +366,7 @@ export const VisualEditor = ({
 
       <div className="editor-add-actions">
         <button
+          id={ADD_LIST_ID}
           className="secondary-button"
           type="button"
           onClick={() => apply(appendBlock(document, createList('')))}

@@ -249,6 +249,38 @@ describe('VisualEditor destructive confirmation', () => {
       kind: 'list-removed',
       subject: 'List 1: Work',
     })
+
+    // Confirming unmounts the control that was holding focus, so it lands on
+    // the neighbouring list rather than falling out of the editor to the body.
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Title of List 2: Work' })).toHaveFocus(),
+    )
+  })
+
+  it('lands on the previous list when the last one is removed', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 3' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm removing List 3' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Title of List 2: Work' })).toHaveFocus(),
+    )
+  })
+
+  it('lands on the add-list action when the only list is removed', async () => {
+    const user = userEvent.setup()
+    const document = buildDocument()
+    document.blocks = document.blocks.slice(0, 1)
+    renderEditor(document)
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 1: Work' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm removing List 1: Work' }))
+
+    // Nothing is left in the stack to hold focus, so the action that rebuilds
+    // a list is the landing point.
+    await waitFor(() => expect(screen.getByRole('button', { name: COPY.addList })).toHaveFocus())
   })
 
   it('keeps the list and returns focus to its remove control when declined', async () => {
