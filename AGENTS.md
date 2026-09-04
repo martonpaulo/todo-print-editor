@@ -54,6 +54,7 @@ Treat these values as stable project decisions. Change an established identifier
 - Keep reusable visible product copy in `src/copy.ts` and reusable design values in `src/styles/tokens.css`.
 - Keep physical paper dimensions in the print token group and make screen preview and `@media print` consume the same tokens.
 - Keep screen editing components under `src/components/`; `App.tsx` owns mode synchronization and document-level settings.
+- `src/domain/file.ts` owns taking the document out of the browser and reading one back: file naming, exported bytes, and the two thin browser adapters that download and read a file. It is the one module under `src/domain/` that touches the DOM, and it holds no product rule of its own — an import is parsed by `src/domain/markdown.ts` like any other source, so a file can never enter content that typing could not.
 - Attach tests to the public domain seams beside their modules as `*.test.ts` files.
 
 ## Instruction hierarchy and sources of truth

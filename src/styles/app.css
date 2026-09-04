@@ -63,6 +63,40 @@ body,
   text-wrap: pretty;
 }
 
+/* The native file input stays in the accessibility tree and keeps its own focus, so it is hidden
+   the way the toggle inputs are rather than replaced by a scripted button. */
+.file-input-control {
+  position: relative;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.file-input-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.file-input-control:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Sits on its own line beside the print hint it follows, so an import that changed nothing is
+   read next to the actions rather than under the document. */
+.import-status {
+  display: flex;
+  align-items: center;
+  flex-basis: 100%;
+  gap: var(--space-2);
+  max-width: 44rem;
+  margin: 0;
+  color: var(--status-attention);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .toggle-control {
   position: relative;
   gap: var(--space-2);

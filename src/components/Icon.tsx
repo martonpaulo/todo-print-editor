@@ -6,12 +6,15 @@ type IconName =
   | 'calendar'
   | 'check'
   | 'code'
+  | 'download'
+  | 'file'
   | 'list'
   | 'moon'
   | 'panel'
   | 'plus'
   | 'printer'
   | 'trash'
+  | 'upload'
   | 'warning'
 
 interface IconProps extends SVGProps<SVGSVGElement> {
@@ -31,6 +34,13 @@ export const Icon = ({ name, size = 18, ...props }: IconProps) => {
     ),
     check: <path d="m5 12 4 4L19 6" />,
     code: <path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" />,
+    download: <path d="M12 4v11M8 11l4 4 4-4M5 19h14" />,
+    file: (
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 3v5h5" />
+      </>
+    ),
     list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
     // Three Moon primitives — the semicircle of C, the vertical line of I, the angle of A — which
     // is what the toggle switches the document to.
@@ -49,6 +59,7 @@ export const Icon = ({ name, size = 18, ...props }: IconProps) => {
       </>
     ),
     trash: <path d="M4 7h16M9 11v6M15 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />,
+    upload: <path d="M12 15V4M8 8l4-4 4 4M5 19h14" />,
     warning: (
       <>
         <path d="M12 4 3 20h18L12 4Z" />

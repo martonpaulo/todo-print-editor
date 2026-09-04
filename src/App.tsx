@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect, type FocusEvent } from 'react'
+import { useCallback, useRef, useState, useEffect, type ChangeEvent, type FocusEvent } from 'react'
 import './styles/app.css'
 import { COPY } from './copy'
 import { MarkdownEditor } from './components/MarkdownEditor'
@@ -7,6 +7,14 @@ import { PrintPreview, type LayoutStatus } from './components/PrintPreview'
 import { StorageStatus } from './components/StorageStatus'
 import { VisualEditor } from './components/VisualEditor'
 import { listCardId } from './components/elementIds'
+import {
+  MARKDOWN_FILE_ACCEPT,
+  MARKDOWN_MIME_TYPE,
+  downloadTextFile,
+  markdownFileContent,
+  markdownFileName,
+  readTextFile,
+} from './domain/file'
 import { parseMarkdown, serializeMarkdown } from './domain/markdown'
 import type { MarkdownError, TodoDocument } from './domain/types'
 import { usePersistentDocument, type DocumentEdit } from './hooks/usePersistentDocument'
@@ -27,6 +35,23 @@ const PREVIEW_REGION_ID = 'preview-region'
 // The toggle's own name is only the alphabet's name; what switching it does to the document, and
 // which characters keep their Latin form, is carried in an adjacent description.
 const MOON_HINT_ID = 'moon-typography-hint'
+
+// Importing replaces the whole document, so what the picker is about to do is described with the
+// control rather than discovered afterwards.
+const IMPORT_HINT_ID = 'import-markdown-hint'
+
+/**
+ * Why an import left the document unchanged. `null` is the ordinary state: nothing was imported,
+ * or the last import succeeded.
+ *
+ * - `unreadable`: the browser could not read the chosen file at all.
+ * - `invalid`: the file was read, but its Markdown does not parse. The source is loaded into the
+ *   Markdown view so the numbered errors point at the lines that need fixing, and it is kept here
+ *   so the status can be shown only while that exact source is still on screen. Reporting on
+ *   `markdownErrors` instead would let the message return for a later, unrelated error the import
+ *   had nothing to do with.
+ */
+type ImportFailure = { kind: 'unreadable' } | { kind: 'invalid'; source: string } | null
 
 // jsdom, and any environment without a layout engine, leaves scrollIntoView
 // undefined; focus() already scrolls, so the explicit call only refines where
@@ -58,6 +83,7 @@ const App = () => {
     status: storageStatus,
     lastEdit,
     setDocument,
+    replaceDocument,
     replaceStoredDocument,
     undo,
     redo,
@@ -66,6 +92,11 @@ const App = () => {
   const [markdown, setMarkdown] = useState(() => serializeMarkdown(document))
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
   const [layoutStatus, setLayoutStatus] = useState(INITIAL_LAYOUT_STATUS)
+  const [importFailure, setImportFailure] = useState<ImportFailure>(null)
+  // Counts import selections so a read that resolves after a newer one can recognize itself as
+  // stale. A ref, not state: nothing renders from it, and it must be current the moment an await
+  // returns rather than at the next render.
+  const importSelection = useRef(0)
   // Returning from the preview lands on the control the user last edited rather
   // than on the top of a document that can be several screens tall.
   const lastEditedElement = useRef<HTMLElement | null>(null)
@@ -115,6 +146,58 @@ const App = () => {
     const result = parseMarkdown(source, document)
     setMarkdownErrors(result.errors)
     if (result.errors.length === 0) setDocument(result.document)
+  }
+
+  // The file is the source the Markdown view shows, not a fresh serialization of the document.
+  // While a draft has errors the document is deliberately the last valid one, so writing it would
+  // hand back an older file than the work on screen — which is the copy the storage guidance tells
+  // the user to take out of the app. `markdown` tracks the document whenever the source parses, so
+  // exporting from the visual editor is unaffected.
+  const exportMarkdown = () => {
+    downloadTextFile(markdownFileName(document), markdownFileContent(markdown), MARKDOWN_MIME_TYPE)
+  }
+
+  // An import is an ordinary Markdown change: the same parse decides whether the document is
+  // replaced, so a file can never put content into the document that typing could not. It is not
+  // a continuation of what the user was typing, though, so it takes an undo step of its own: the
+  // control promises that undo restores what was here, and a neighbouring keystroke coalesced
+  // into the same step would restore more than that.
+  const importMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target
+    const file = input.files?.[0]
+    // Choosing the same file twice must read it again, so the input never keeps a value.
+    input.value = ''
+    if (!file) return
+
+    // Reads are asynchronous and can finish in any order, so a slow first choice must not land on
+    // top of a quick second one. Only the newest selection may apply its result; every earlier
+    // read is abandoned where it would otherwise write.
+    const selection = (importSelection.current += 1)
+    const superseded = () => selection !== importSelection.current
+
+    let source: string
+    try {
+      source = await readTextFile(file)
+    } catch {
+      if (superseded()) return
+      setImportFailure({ kind: 'unreadable' })
+      return
+    }
+
+    if (superseded()) return
+
+    setMarkdown(source)
+    const result = parseMarkdown(source, document)
+    setMarkdownErrors(result.errors)
+
+    if (result.errors.length > 0) {
+      setImportFailure({ kind: 'invalid', source })
+      setMode('markdown')
+      return
+    }
+
+    setImportFailure(null)
+    replaceDocument(result.document)
   }
 
   const changeMode = (nextMode: EditorMode) => {
@@ -296,6 +379,44 @@ const App = () => {
                 </button>
               </div>
 
+              {/* The file lives outside the browser, so exporting is offered whatever the
+                  layout says: an oversized list blocks printing, never keeping a copy. */}
+              <button className="secondary-button" type="button" onClick={exportMarkdown}>
+                <Icon name="download" size={16} />
+                {COPY.exportMarkdown}
+              </button>
+
+              {/* A label around a visually hidden file input keeps the native picker, its
+                  keyboard focus, and its accessible name instead of re-implementing them. */}
+              <label className="secondary-button file-input-control">
+                <input
+                  type="file"
+                  accept={MARKDOWN_FILE_ACCEPT}
+                  aria-describedby={IMPORT_HINT_ID}
+                  onChange={importMarkdown}
+                />
+                <Icon name="upload" size={16} />
+                <span>{COPY.importMarkdown}</span>
+              </label>
+              <p className="sr-only" id={IMPORT_HINT_ID}>
+                {COPY.importMarkdownHint}
+              </p>
+
+              {/* The same dialog as Print A4, named for the file a user comes looking for: no
+                  page can preselect its destination, so the name says the dialog opens rather
+                  than promising a saved file. It obeys the same block, because a document that
+                  cannot be laid out cannot be written to a file either. */}
+              <button
+                className="secondary-button"
+                type="button"
+                aria-describedby={PRINT_HINT_ID}
+                disabled={!canPrint}
+                onClick={() => window.print()}
+              >
+                <Icon name="file" size={16} />
+                {COPY.savePdf}
+              </button>
+
               <button
                 className="primary-button"
                 type="button"
@@ -325,6 +446,23 @@ const App = () => {
               <p className="print-dialog-hint" id={PRINT_HINT_ID}>
                 {COPY.printDialogHint}
               </p>
+
+              {/* An import that changed nothing must say so: the document on screen is still the
+                  one that was there before the file was chosen. */}
+              {importFailure?.kind === 'unreadable' && (
+                <p className="import-status" role="status">
+                  <Icon name="warning" size={16} />
+                  <span>{COPY.importFailed}</span>
+                </p>
+              )}
+              {/* Only while the rejected source is still the one on screen. The first edit to it
+                  ends the statement's subject, and no later error can revive it. */}
+              {importFailure?.kind === 'invalid' && markdown === importFailure.source && (
+                <p className="import-status" role="status">
+                  <Icon name="warning" size={16} />
+                  <span>{COPY.importFailedWithErrors}</span>
+                </p>
+              )}
             </div>
           </header>
 
