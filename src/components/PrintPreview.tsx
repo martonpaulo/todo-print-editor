@@ -295,6 +295,22 @@ const usePrintMeasurements = (document: TodoDocument) => {
   return { rootRef, measurements }
 }
 
+/**
+ * The stage's own rendered content box. `.preview-stage` is padded from a spacing token that a
+ * responsive breakpoint changes, so the stylesheet is the single owner of that gutter and the scale
+ * below reads the result instead of restating the number.
+ */
+const contentBoxWidth = (element: HTMLElement): number => {
+  const style = window.getComputedStyle(element)
+  const parsePx = (value: string): number => {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  // `clientWidth` is the padding box, and excludes any scrollbar the stage happens to show.
+  return element.clientWidth - parsePx(style.paddingLeft) - parsePx(style.paddingRight)
+}
+
 interface PreviewMetrics {
   width: number
   height: number
@@ -315,7 +331,7 @@ const usePreviewMetrics = () => {
       if (typeof window !== 'undefined' && window.matchMedia('print').matches) return
       const width = page.offsetWidth
       const height = page.offsetHeight
-      const availableWidth = Math.max(stage.clientWidth - 48, 1)
+      const availableWidth = Math.max(contentBoxWidth(stage), 1)
       const scale = Math.min(1, availableWidth / width)
       const next = { width, height, scale }
       setMetrics((current) =>
