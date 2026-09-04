@@ -1,4 +1,5 @@
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PrintPreview } from './PrintPreview'
 import { COPY } from '../copy'
@@ -111,5 +112,84 @@ describe('PrintPreview page structure', () => {
     expect(previewList).toHaveTextContent('A task')
     expect(previewList?.querySelector('h2')).toBeNull()
     expect(previewList?.querySelector('.print-list__rule')).toBeNull()
+  })
+})
+
+describe('PrintPreview zoom', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  const renderPreview = (onLayoutStatusChange = () => {}) =>
+    render(<PrintPreview document={documentOfPanels(1)} onLayoutStatusChange={onLayoutStatusChange} />)
+
+  const zoomLevel = () => screen.getByRole('group', { name: COPY.previewZoom }).textContent
+
+  it('opens at the fit-to-width scale with the reset unavailable', () => {
+    renderPreview()
+
+    expect(zoomLevel()).toContain(COPY.zoomLevel(100))
+    expect(screen.getByRole('button', { name: COPY.resetZoom })).toBeDisabled()
+  })
+
+  it('zooms in and out in whole quarter steps and returns to fit', async () => {
+    const user = userEvent.setup()
+    renderPreview()
+
+    await user.click(screen.getByRole('button', { name: COPY.zoomIn }))
+    expect(zoomLevel()).toContain(COPY.zoomLevel(125))
+
+    await user.click(screen.getByRole('button', { name: COPY.zoomOut }))
+    await user.click(screen.getByRole('button', { name: COPY.zoomOut }))
+    expect(zoomLevel()).toContain(COPY.zoomLevel(75))
+
+    await user.click(screen.getByRole('button', { name: COPY.resetZoom }))
+    expect(zoomLevel()).toContain(COPY.zoomLevel(100))
+    expect(screen.getByRole('button', { name: COPY.resetZoom })).toBeDisabled()
+  })
+
+  it('stops at half and double the fit scale', async () => {
+    const user = userEvent.setup()
+    renderPreview()
+
+    const zoomIn = screen.getByRole('button', { name: COPY.zoomIn })
+    for (let step = 0; step < 6; step += 1) {
+      if (!(zoomIn as HTMLButtonElement).disabled) await user.click(zoomIn)
+    }
+    expect(zoomLevel()).toContain(COPY.zoomLevel(200))
+    expect(zoomIn).toBeDisabled()
+
+    const zoomOut = screen.getByRole('button', { name: COPY.zoomOut })
+    for (let step = 0; step < 8; step += 1) {
+      if (!(zoomOut as HTMLButtonElement).disabled) await user.click(zoomOut)
+    }
+    expect(zoomLevel()).toContain(COPY.zoomLevel(50))
+    expect(zoomOut).toBeDisabled()
+  })
+
+  it('keeps the controls off the paper', () => {
+    const { container } = renderPreview()
+
+    expect(container.querySelector('.preview-zoom')).toHaveClass('screen-only')
+    expect(container.querySelector('.print-page .preview-zoom')).toBeNull()
+  })
+
+  it('reports the same layout status however the preview is zoomed', async () => {
+    const user = userEvent.setup()
+    const onLayoutStatusChange = vi.fn()
+    renderPreview(onLayoutStatusChange)
+
+    const before = onLayoutStatusChange.mock.calls.at(-1)?.[0]
+    await user.click(screen.getByRole('button', { name: COPY.zoomIn }))
+
+    expect(onLayoutStatusChange.mock.calls.at(-1)?.[0]).toEqual(before)
   })
 })

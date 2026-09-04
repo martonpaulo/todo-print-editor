@@ -82,6 +82,8 @@
 
   /* Application layout tokens */
   --editor-width: clamp(25rem, 34vw, 34rem);
+  /* Reserved so the zoom readout keeps its place as the percentage changes width. */
+  --preview-zoom-readout-width: 3.25rem;
 
   /* Physical print tokens — edit these to retune the paper layout */
   --print-ink: #000000;

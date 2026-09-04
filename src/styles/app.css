@@ -700,16 +700,66 @@ body,
   font-size: var(--text-xs);
 }
 
+/* The controls stay in view while the stage scrolls under them, so a sheet zoomed past the pane can
+   be zoomed back without scrolling to the top first. */
+.preview-zoom {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--surface-canvas);
+}
+
+.preview-zoom__level {
+  min-width: var(--preview-zoom-readout-width);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-control);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-zoom__reset {
+  min-height: var(--control-height-compact);
+  padding: 0 var(--space-3);
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-action);
+}
+
+.preview-zoom__reset:hover:not(:disabled) {
+  color: var(--action-text);
+  background: var(--action-surface);
+  border-color: var(--action-border);
+}
+
+.preview-zoom__reset:disabled {
+  opacity: 0.3;
+}
+
 .preview-stage {
   min-width: 0;
   padding: var(--space-8) var(--space-6);
-  overflow: hidden;
+  /* A sheet zoomed past the stage scrolls inside it; at or below the fit scale nothing overflows,
+     so no scrollbar appears. */
+  overflow: auto;
 }
 
 .print-pages {
   display: grid;
   justify-items: center;
   gap: var(--space-8);
+  /* Centered while the sheets fit, grown to the widest sheet once they do not, so a zoomed sheet
+     scrolls to both of its edges instead of being clipped at the start one. */
+  width: max-content;
+  min-width: 100%;
+  margin-inline: auto;
 }
 
 .preview-page-shell {
@@ -809,6 +859,10 @@ body,
 
   .preview-stage {
     padding: var(--space-5) var(--space-3);
+  }
+
+  .preview-zoom {
+    padding-inline: var(--space-3);
   }
 }
 

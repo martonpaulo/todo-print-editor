@@ -16,6 +16,8 @@ type IconName =
   | 'trash'
   | 'upload'
   | 'warning'
+  | 'zoom-in'
+  | 'zoom-out'
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName
@@ -64,6 +66,18 @@ export const Icon = ({ name, size = 18, ...props }: IconProps) => {
       <>
         <path d="M12 4 3 20h18L12 4Z" />
         <path d="M12 9v5M12 17h.01" />
+      </>
+    ),
+    'zoom-in': (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4.2-4.2M11 8v6M8 11h6" />
+      </>
+    ),
+    'zoom-out': (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4.2-4.2M8 11h6" />
       </>
     ),
   }

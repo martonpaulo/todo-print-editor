@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { type Browser, type Page } from 'puppeteer'
 import { createServer, type ViteDevServer } from 'vite'
 import { launchBrowser } from './browser'
@@ -189,5 +189,120 @@ describe('preview scaling', () => {
   it('caps the scale at 1 on a viewport wider than the sheet', () => {
     expect(at(2600).scale).toBe(1)
     expect(at(2600).contentWidthPx).toBeGreaterThan(at(2600).unscaledSheetWidthPx)
+  })
+
+  /**
+   * Zoom multiplies that fit scale, so what it changes is the rendered sheet and the space reserved
+   * for it — never the paginated layout, and never a number jsdom could report. These cases run on
+   * the live page left at 900px, and each returns the preview to the fit scale it found.
+   */
+  describe('zoom', () => {
+    const clickZoom = async (name: string): Promise<void> => {
+      await page.evaluate((label: string) => {
+        const control = [...window.document.querySelectorAll('.preview-zoom button')].find(
+          (button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim() === label,
+        )
+        if (!(control instanceof HTMLButtonElement)) throw new Error(`No ${label} control`)
+        control.click()
+      }, name)
+      await page.waitForNetworkIdle({ idleTime: 50 }).catch(() => {})
+    }
+
+    const settle = async (expected: number): Promise<void> => {
+      await page.waitForFunction(
+        (scale: number) => {
+          const sheet = window.document.querySelector('.print-page')
+          if (!(sheet instanceof HTMLElement)) return false
+          return (
+            Math.abs(new DOMMatrixReadOnly(window.getComputedStyle(sheet).transform).a - scale) <
+            1e-6
+          )
+        },
+        { timeout: 10_000 },
+        expected,
+      )
+    }
+
+    afterEach(async () => {
+      await clickZoom('Reset to fit')
+      await settle(at(900).scale)
+    })
+
+    it('multiplies the fit scale by the zoom step', async () => {
+      await clickZoom('Zoom in')
+      await settle(at(900).scale * 1.25)
+
+      const zoomed = await measureStage()
+      expect(zoomed.unscaledSheetWidthPx).toBe(at(900).unscaledSheetWidthPx)
+      expect(zoomed.sheetWidthPx).toBeCloseTo(at(900).sheetWidthPx * 1.25, 0)
+    })
+
+    it('scrolls the stage to both edges of a sheet wider than it', async () => {
+      await clickZoom('Zoom in')
+      await settle(at(900).scale * 1.25)
+
+      const reach = await page.evaluate(() => {
+        const stage = window.document.querySelector('.preview-stage')
+        const shell = window.document.querySelector('.preview-page-shell')
+        if (!(stage instanceof HTMLElement) || !(shell instanceof HTMLElement)) {
+          throw new Error('The preview rendered no stage')
+        }
+
+        stage.scrollLeft = 0
+        const startGap = shell.getBoundingClientRect().left - stage.getBoundingClientRect().left
+        stage.scrollLeft = stage.scrollWidth
+        const endGap = stage.getBoundingClientRect().right - shell.getBoundingClientRect().right
+        stage.scrollLeft = 0
+
+        return { overflows: stage.scrollWidth > stage.clientWidth, startGap, endGap }
+      })
+
+      expect(reach.overflows).toBe(true)
+      // Neither edge of the sheet is stranded outside the scrollable range.
+      expect(reach.startGap).toBeGreaterThanOrEqual(-EPSILON_PX)
+      expect(reach.endGap).toBeGreaterThanOrEqual(-EPSILON_PX)
+    })
+
+    it('reaches neither the controls nor the sheet under print media', async () => {
+      await clickZoom('Zoom in')
+      await settle(at(900).scale * 1.25)
+
+      await page.emulateMediaType('print')
+      try {
+        const printed = await page.evaluate(() => {
+          const controls = window.document.querySelector('.preview-zoom')
+          const sheet = window.document.querySelector('.print-page')
+          if (!(controls instanceof HTMLElement) || !(sheet instanceof HTMLElement)) {
+            throw new Error('The preview rendered no zoom controls')
+          }
+
+          return {
+            controlsDisplay: window.getComputedStyle(controls).display,
+            sheetTransform: window.getComputedStyle(sheet).transform,
+            sheetWidthPx: sheet.getBoundingClientRect().width,
+            unscaledSheetWidthPx: sheet.offsetWidth,
+          }
+        })
+
+        expect(printed.controlsDisplay).toBe('none')
+        // The zoom transform is dropped on paper, so a zoomed preview prints the recorded sheet.
+        expect(printed.sheetTransform).toBe('none')
+        expect(printed.sheetWidthPx).toBeCloseTo(printed.unscaledSheetWidthPx, 0)
+      } finally {
+        // `undefined`, not `null`: Puppeteer types the parameter as `string | undefined`.
+        await page.emulateMediaType(undefined)
+      }
+    })
+
+    it('leaves the fit scale itself unchanged, so reset returns to it', async () => {
+      await clickZoom('Zoom out')
+      await settle(at(900).scale * 0.75)
+      await clickZoom('Reset to fit')
+      await settle(at(900).scale)
+
+      const reset = await measureStage()
+      expect(reset.scale).toBeCloseTo(at(900).scale, 5)
+      expect(reset.scrollWidthPx).toBeLessThanOrEqual(reset.clientWidthPx + EPSILON_PX)
+    })
   })
 })
