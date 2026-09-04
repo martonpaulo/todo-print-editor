@@ -67,11 +67,11 @@ describe('App', () => {
     render(<App />)
 
     const printButton = await screen.findByRole('button', { name: COPY.print })
-    const hint = screen.getByText(COPY.printDialogHint)
+    const hint = screen.getByText(COPY.printDialogHint(false))
 
     // The action names only the format, while the settings the browser owns stay
     // in the description so the accessible name does not grow to a paragraph.
-    expect(printButton).toHaveAccessibleDescription(COPY.printDialogHint)
+    expect(printButton).toHaveAccessibleDescription(COPY.printDialogHint(false))
     expect(printButton.getAttribute('aria-describedby')).toBe(hint.id)
 
     // Both live inside the screen-only toolbar, so the print stylesheet hides them.
@@ -208,6 +208,55 @@ describe('App', () => {
     cleanup()
     render(<App />)
     expect(screen.getByRole('checkbox', { name: COPY.moonTypography })).toBeChecked()
+  })
+
+  it('persists the print rotation and declares the portrait sheet only while it is on', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const toggle = screen.getByRole('checkbox', { name: COPY.rotatePrint })
+    const pageRule = () => document.head.querySelector('#rotated-page-size')
+    expect(document.documentElement).not.toHaveClass('print-rotated')
+    expect(pageRule()).toBeNull()
+
+    await user.click(toggle)
+    // The paper is the whole feature, and `@page` cannot be scoped by a selector, so the portrait
+    // rule has to be attached rather than switched on.
+    expect(document.documentElement).toHaveClass('print-rotated')
+    expect(pageRule()?.textContent).toContain('A4 portrait')
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}').rotatePrint).toBe(true)
+
+    cleanup()
+    render(<App />)
+    expect(screen.getByRole('checkbox', { name: COPY.rotatePrint })).toBeChecked()
+
+    // Turning it off leaves the landscape `@page` in the stylesheet as the only one in force.
+    await user.click(screen.getByRole('checkbox', { name: COPY.rotatePrint }))
+    expect(document.documentElement).not.toHaveClass('print-rotated')
+    expect(pageRule()).toBeNull()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}').rotatePrint).toBe(false)
+  })
+
+  it('names portrait paper in the print-dialog guidance while the rotation is on', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.getByText(COPY.printDialogHint(false))).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: COPY.rotatePrint }))
+    // Following the landscape instruction with the rotation on is exactly the misprint the setting
+    // exists to avoid, so the guidance has to move with it.
+    expect(screen.getByText(COPY.printDialogHint(true))).toBeInTheDocument()
+    expect(screen.queryByText(COPY.printDialogHint(false))).toBeNull()
+  })
+
+  it('describes what the print rotation is for, with the control', () => {
+    render(<App />)
+
+    const toggle = screen.getByRole('checkbox', { name: COPY.rotatePrint })
+    const describedBy = toggle.getAttribute('aria-describedby')
+    expect(describedBy).not.toBeNull()
+    expect(document.getElementById(describedBy ?? '')).toHaveTextContent(COPY.rotatePrintHint)
   })
 
   it('keeps completed tasks marked as completed in Moon type', async () => {
@@ -739,7 +788,7 @@ describe('App', () => {
 
     // One dialog, two destinations, so one description carries the settings for both. The name
     // says the dialog opens: no page can preselect the destination it will show.
-    expect(saveButton).toHaveAccessibleDescription(COPY.printDialogHint)
+    expect(saveButton).toHaveAccessibleDescription(COPY.printDialogHint(false))
     expect(saveButton).toHaveAccessibleName('Print or save as PDF')
     expect(saveButton.closest('.screen-only')).not.toBeNull()
 

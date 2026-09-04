@@ -36,6 +36,20 @@ const PREVIEW_REGION_ID = 'preview-region'
 // which characters keep their Latin form, is carried in an adjacent description.
 const MOON_HINT_ID = 'moon-typography-hint'
 
+// The rotation's name says what it does to the paper, not why anyone would want it; the printer
+// behaviour it works around is carried in an adjacent description.
+const ROTATE_PRINT_HINT_ID = 'rotate-print-hint'
+
+/**
+ * The portrait sheet, declared apart from `src/styles/print.css`. `@page` cannot be scoped by a
+ * selector and does not read custom properties, so the only way to make the paper depend on a
+ * document setting is to attach and detach the rule itself. It is appended last, after the
+ * stylesheet's landscape `@page`, so it wins by cascade order while it is present, and it is removed
+ * with the setting so the two are never both live.
+ */
+const ROTATED_PAGE_STYLE_ID = 'rotated-page-size'
+const ROTATED_PAGE_RULE = '@page { size: A4 portrait; margin: 0; }'
+
 // Importing replaces the whole document, so what the picker is about to do is described with the
 // control rather than discovered afterwards.
 const IMPORT_HINT_ID = 'import-markdown-hint'
@@ -243,6 +257,24 @@ const App = () => {
   }
 
 
+  // The rotation is a property of the paper, not of anything the preview renders, so it reaches
+  // print through the document element the print stylesheet keys on rather than through a prop.
+  useEffect(() => {
+    const root = window.document.documentElement
+    if (!document.rotatePrint) return
+
+    root.classList.add('print-rotated')
+    const pageStyle = window.document.createElement('style')
+    pageStyle.id = ROTATED_PAGE_STYLE_ID
+    pageStyle.textContent = ROTATED_PAGE_RULE
+    window.document.head.append(pageStyle)
+
+    return () => {
+      root.classList.remove('print-rotated')
+      pageStyle.remove()
+    }
+  }, [document.rotatePrint])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement) return
@@ -357,6 +389,25 @@ const App = () => {
                 {COPY.moonTypographyHint}
               </p>
 
+              {/* The layout stays A4 landscape whatever this says: only the paper the finished
+                  sheet is imaged onto turns, for printers that rotate landscape media themselves. */}
+              <label className="toggle-control">
+                <input
+                  type="checkbox"
+                  aria-describedby={ROTATE_PRINT_HINT_ID}
+                  checked={document.rotatePrint === true}
+                  onChange={(event) =>
+                    applyDocumentSettings({ ...document, rotatePrint: event.target.checked })
+                  }
+                />
+                <span className="toggle-control__track" aria-hidden="true" />
+                <Icon name="rotate" size={17} />
+                <span>{COPY.rotatePrint}</span>
+              </label>
+              <p className="sr-only" id={ROTATE_PRINT_HINT_ID}>
+                {COPY.rotatePrintHint}
+              </p>
+
               <div className="mode-switcher" role="group" aria-label={COPY.editorMode}>
                 <button
                   type="button"
@@ -444,7 +495,7 @@ const App = () => {
               </button>
 
               <p className="print-dialog-hint" id={PRINT_HINT_ID}>
-                {COPY.printDialogHint}
+                {COPY.printDialogHint(document.rotatePrint === true)}
               </p>
 
               {/* An import that changed nothing must say so: the document on screen is still the

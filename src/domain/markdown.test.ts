@@ -273,6 +273,18 @@ describe('Markdown document conversion', () => {
     expect(result.errors).toEqual([])
     expect(result.document.typography).toBe('moon')
   })
+
+  // The print rotation is a setting for the user's own printer, not something a file they share
+  // should carry, so it survives the round trip without ever being written into the source.
+  it('carries the print rotation through a Markdown round trip without serializing it', () => {
+    const rotatedDocument: TodoDocument = { ...baseDocument, rotatePrint: true }
+    const source = serializeMarkdown(rotatedDocument)
+    const result = parseMarkdown(source, rotatedDocument)
+
+    expect(source).not.toMatch(/rotate/i)
+    expect(result.errors).toEqual([])
+    expect(result.document.rotatePrint).toBe(true)
+  })
 })
 
 describe('Markdown draft parsing and identity reconciliation', () => {

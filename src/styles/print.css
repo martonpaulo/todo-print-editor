@@ -339,6 +339,32 @@
     overflow: hidden !important;
   }
 
+  /*
+   * The transport workaround (#54). The sheet is unchanged — same `297mm × 210mm` box, same three
+   * `99mm × 210mm` panels — and only the paper it is imaged onto turns, so the rotation is a
+   * transform on the finished sheet rather than a second layout.
+   *
+   * The shell is given the portrait paper and the sheet is turned inside it: the sheet keeps its
+   * landscape flow box, which overflows the shell horizontally and is clipped there, while the
+   * painted result lands inside the shell's box. Without that the landscape box would overflow the
+   * portrait page area itself. `translateY(-100%)` resolves against the sheet's own border box, so
+   * the turned sheet lands against the shell's top-left corner whatever height the panel clamp
+   * settles on.
+   *
+   * `!important` for the same reason the unrotated rule above has it: the preview writes its own
+   * `transform` as an inline style, and print must own the transform on paper.
+   */
+  .print-rotated .preview-page-shell {
+    width: var(--print-page-height) !important;
+    height: var(--print-page-width) !important;
+    overflow: hidden !important;
+  }
+
+  .print-rotated .print-page {
+    transform: rotate(90deg) translateY(-100%) !important;
+    transform-origin: top left !important;
+  }
+
   .app-shell--print-blocked .workspace {
     display: none !important;
   }

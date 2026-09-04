@@ -31,6 +31,14 @@ export interface TodoDocument {
   showDate: boolean
   showPanelNumbers: boolean
   typography: Typography
+  /**
+   * Whether the printed sheet is imaged onto portrait paper, turned a quarter turn. A transport
+   * workaround for drivers that rotate or rescale landscape media on their own, not a second
+   * supported orientation: the document, its pagination and its layout stay A4 landscape, and only
+   * the paper the same sheet lands on turns. Optional because documents were persisted before it
+   * existed; absent reads as off.
+   */
+  rotatePrint?: boolean
   blocks: DocumentBlock[]
 }
 

@@ -13,6 +13,7 @@ type IconName =
   | 'panel'
   | 'plus'
   | 'printer'
+  | 'rotate'
   | 'trash'
   | 'upload'
   | 'warning'
@@ -60,6 +61,8 @@ export const Icon = ({ name, size = 18, ...props }: IconProps) => {
         <path d="M7 14h10v7H7z" />
       </>
     ),
+    // The quarter-turn the setting applies to the sheet, as the usual circular arrow.
+    rotate: <path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" />,
     trash: <path d="M4 7h16M9 11v6M15 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />,
     upload: <path d="M12 15V4M8 8l4-4 4 4M5 19h14" />,
     warning: (

@@ -318,7 +318,11 @@ interface PreviewMetrics {
   scale: number
 }
 
-const usePreviewMetrics = () => {
+/**
+ * `rotated` is the setting's only effect on the preview: the sheet keeps its landscape box and is
+ * turned by a transform, so the width that has to fit the stage is the sheet's height.
+ */
+const usePreviewMetrics = (rotated: boolean) => {
   const stageRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const [metrics, setMetrics] = useState<PreviewMetrics | null>(null)
@@ -333,7 +337,7 @@ const usePreviewMetrics = () => {
       const width = page.offsetWidth
       const height = page.offsetHeight
       const availableWidth = Math.max(contentBoxWidth(stage), 1)
-      const scale = Math.min(1, availableWidth / width)
+      const scale = Math.min(1, availableWidth / (rotated ? height : width))
       const next = { width, height, scale }
       setMetrics((current) =>
         current &&
@@ -350,7 +354,7 @@ const usePreviewMetrics = () => {
     observer?.observe(stage)
     observer?.observe(page)
     return () => observer?.disconnect()
-  }, [])
+  }, [rotated])
 
   return { stageRef, pageRef, metrics }
 }
@@ -423,7 +427,10 @@ const PreviewZoomControls = ({ zoom, onZoomChange }: PreviewZoomControlsProps) =
 
 export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewProps) => {
   const { rootRef, measurements } = usePrintMeasurements(document)
-  const { stageRef, pageRef, metrics } = usePreviewMetrics()
+  // The preview shows the paper the print dialog will produce, so a rotated document is previewed
+  // turned. Nothing else about the sheet changes: same box, same panels, same pagination.
+  const rotated = document.rotatePrint === true
+  const { stageRef, pageRef, metrics } = usePreviewMetrics(rotated)
   const [zoom, setZoom] = useState(ZOOM_FIT)
   const changeZoom = useCallback((next: number) => setZoom(clampZoom(next)), [])
 
@@ -457,9 +464,22 @@ export const PrintPreview = ({ document, onLayoutStatusChange }: PrintPreviewPro
   const viewScale = metrics ? metrics.scale * zoom : null
   const shellStyle =
     metrics && viewScale !== null
-      ? { width: `${metrics.width * viewScale}px`, height: `${metrics.height * viewScale}px` }
+      ? {
+          width: `${(rotated ? metrics.height : metrics.width) * viewScale}px`,
+          height: `${(rotated ? metrics.width : metrics.height) * viewScale}px`,
+        }
       : undefined
-  const pageStyle = viewScale !== null ? { transform: `scale(${viewScale})` } : undefined
+  // Right to left: the sheet is lifted by its own height, turned a quarter turn clockwise about its
+  // top-left corner — which lands it back against that corner — and only then scaled, so the drawn
+  // sheet fills the shell above whatever the zoom is.
+  const pageStyle =
+    viewScale !== null
+      ? {
+          transform: rotated
+            ? `scale(${viewScale}) rotate(90deg) translateY(-100%)`
+            : `scale(${viewScale})`,
+        }
+      : undefined
 
   return (
     <>
