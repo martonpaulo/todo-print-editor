@@ -41,14 +41,17 @@ const MOON_HINT_ID = 'moon-typography-hint'
 const IMPORT_HINT_ID = 'import-markdown-hint'
 
 /**
- * Why an import can leave the document unchanged. `null` is the ordinary state: nothing was
- * imported, or the last import succeeded.
+ * Why an import left the document unchanged. `null` is the ordinary state: nothing was imported,
+ * or the last import succeeded.
  *
  * - `unreadable`: the browser could not read the chosen file at all.
  * - `invalid`: the file was read, but its Markdown does not parse. The source is loaded into the
- *   Markdown view so the numbered errors point at the lines that need fixing.
+ *   Markdown view so the numbered errors point at the lines that need fixing, and it is kept here
+ *   so the status can be shown only while that exact source is still on screen. Reporting on
+ *   `markdownErrors` instead would let the message return for a later, unrelated error the import
+ *   had nothing to do with.
  */
-type ImportFailure = 'unreadable' | 'invalid' | null
+type ImportFailure = { kind: 'unreadable' } | { kind: 'invalid'; source: string } | null
 
 // jsdom, and any environment without a layout engine, leaves scrollIntoView
 // undefined; focus() already scrolls, so the explicit call only refines where
@@ -90,6 +93,10 @@ const App = () => {
   const [markdownErrors, setMarkdownErrors] = useState<MarkdownError[]>([])
   const [layoutStatus, setLayoutStatus] = useState(INITIAL_LAYOUT_STATUS)
   const [importFailure, setImportFailure] = useState<ImportFailure>(null)
+  // Counts import selections so a read that resolves after a newer one can recognize itself as
+  // stale. A ref, not state: nothing renders from it, and it must be current the moment an await
+  // returns rather than at the next render.
+  const importSelection = useRef(0)
   // Returning from the preview lands on the control the user last edited rather
   // than on the top of a document that can be several screens tall.
   const lastEditedElement = useRef<HTMLElement | null>(null)
@@ -162,20 +169,29 @@ const App = () => {
     input.value = ''
     if (!file) return
 
+    // Reads are asynchronous and can finish in any order, so a slow first choice must not land on
+    // top of a quick second one. Only the newest selection may apply its result; every earlier
+    // read is abandoned where it would otherwise write.
+    const selection = (importSelection.current += 1)
+    const superseded = () => selection !== importSelection.current
+
     let source: string
     try {
       source = await readTextFile(file)
     } catch {
-      setImportFailure('unreadable')
+      if (superseded()) return
+      setImportFailure({ kind: 'unreadable' })
       return
     }
+
+    if (superseded()) return
 
     setMarkdown(source)
     const result = parseMarkdown(source, document)
     setMarkdownErrors(result.errors)
 
     if (result.errors.length > 0) {
-      setImportFailure('invalid')
+      setImportFailure({ kind: 'invalid', source })
       setMode('markdown')
       return
     }
@@ -433,13 +449,15 @@ const App = () => {
 
               {/* An import that changed nothing must say so: the document on screen is still the
                   one that was there before the file was chosen. */}
-              {importFailure === 'unreadable' && (
+              {importFailure?.kind === 'unreadable' && (
                 <p className="import-status" role="status">
                   <Icon name="warning" size={16} />
                   <span>{COPY.importFailed}</span>
                 </p>
               )}
-              {importFailure === 'invalid' && markdownErrors.length > 0 && (
+              {/* Only while the rejected source is still the one on screen. The first edit to it
+                  ends the statement's subject, and no later error can revive it. */}
+              {importFailure?.kind === 'invalid' && markdown === importFailure.source && (
                 <p className="import-status" role="status">
                   <Icon name="warning" size={16} />
                   <span>{COPY.importFailedWithErrors}</span>

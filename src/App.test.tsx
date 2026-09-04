@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -656,6 +656,59 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText(COPY.markdownLabel), {
       target: { value: '## Personal\n- [ ] Call someone\n' },
     })
+    expect(screen.queryByText(COPY.importFailedWithErrors)).not.toBeInTheDocument()
+  })
+
+  it('lets only the newest file selection apply, however the reads finish', async () => {
+    const user = userEvent.setup()
+
+    // Two reads held open, resolved in the opposite order to the choices, which is what a large
+    // first file and a small second one produce in a real browser.
+    const reads: ((text: string) => void)[] = []
+    vi.spyOn(File.prototype, 'text').mockImplementation(
+      () => new Promise<string>((resolve) => reads.push(resolve)),
+    )
+
+    render(<App />)
+    const input = screen.getByLabelText(COPY.importMarkdown)
+
+    await user.upload(input, new File(['first'], 'first.md', { type: 'text/markdown' }))
+    await user.upload(input, new File(['second'], 'second.md', { type: 'text/markdown' }))
+    expect(reads).toHaveLength(2)
+
+    await act(async () => {
+      reads[1]('## Second\n- [ ] From the second file\n')
+    })
+    await act(async () => {
+      reads[0]('## First\n- [ ] From the first file\n')
+    })
+
+    // The abandoned read must not land on top of the choice that replaced it.
+    const titles = screen
+      .getAllByRole('textbox', { name: /^Title of / })
+      .map((i) => (i as HTMLInputElement).value)
+    expect(titles).toEqual(['Second'])
+  })
+
+  it('drops the invalid-import status once the imported source is edited', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.upload(
+      screen.getByLabelText(COPY.importMarkdown),
+      new File(['### Personal\n- [ ] Call someone\n'], 'todo.md', { type: 'text/markdown' }),
+    )
+    expect(screen.getByText(COPY.importFailedWithErrors)).toBeInTheDocument()
+
+    const textarea = screen.getByLabelText(COPY.markdownLabel)
+    // Correcting the imported source clears the status with the errors it described.
+    fireEvent.change(textarea, { target: { value: '## Personal\n- [ ] Call someone\n' } })
+    expect(screen.queryByText(COPY.importFailedWithErrors)).not.toBeInTheDocument()
+
+    // A later mistake of the user's own is not the import's doing, so the import status must not
+    // come back to blame a file that is no longer on screen.
+    fireEvent.change(textarea, { target: { value: '## Personal\n- [ ] Call someone\nnonsense\n' } })
+    expect(screen.getByText(COPY.markdownErrorLine(3, 'unrecognized-line'))).toBeInTheDocument()
     expect(screen.queryByText(COPY.importFailedWithErrors)).not.toBeInTheDocument()
   })
 
