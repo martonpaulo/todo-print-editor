@@ -92,7 +92,13 @@
   --print-panel-height: 210mm;
   --print-panel-padding-x: 8mm;
   --print-panel-padding-y: 8mm;
-  --print-panel-divider: 0.3mm;
+  /*
+   * One weight for every intentional stroke on paper — the panel divider, the list rule and the
+   * checkbox frame. `print.css` paints all three as filled ink rather than as borders, because a
+   * used border width is floored to a whole layout pixel and would print lighter than the others at
+   * the same declared width. The overflow outline there is deliberately outside this token.
+   */
+  --print-stroke-width: 0.3mm;
   --print-date-size: 17pt;
   --print-date-space: 7mm;
   --print-panel-number-size: 7pt;

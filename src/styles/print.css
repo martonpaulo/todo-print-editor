@@ -34,7 +34,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: var(--print-panel-divider);
+  width: var(--print-stroke-width);
   height: 100%;
   content: '';
   background: var(--print-ink);
@@ -94,6 +94,11 @@
   margin-top: var(--print-list-gap);
 }
 
+/*
+ * Deliberately outside `--print-stroke-width`: this outline is not content ink but a preview marker
+ * for a list that cannot fit its panel, so it must read as heavier and broken rather than as one
+ * more rule on the page.
+ */
 .print-list--overflow {
   outline: 0.5mm dashed var(--print-ink);
   outline-offset: 1mm;
@@ -109,7 +114,7 @@
 }
 
 .print-list__rule {
-  height: 0.3mm;
+  height: var(--print-stroke-width);
   margin: 2mm 0 3mm;
   background: var(--print-ink);
 }
@@ -135,7 +140,14 @@
   width: var(--print-checkbox-size);
   height: var(--print-checkbox-size);
   place-items: center;
-  border: 0.35mm solid var(--print-ink);
+  /*
+   * Painted ink, not a `border`: Chromium floors a used border width to a whole layout pixel, so at
+   * 96dpi the same 0.3mm token resolves to 1px here and to 1.125px on the divider and the list rule,
+   * and the checkbox prints visibly lighter than both (#32). An inset shadow is painted geometry
+   * like those two, keeps the fractional width, and leaves the border-box size untouched, so every
+   * stroke this token owns is drawn by the same mechanism at the same weight.
+   */
+  box-shadow: inset 0 0 0 var(--print-stroke-width) var(--print-ink);
   font-family: Arial, sans-serif;
   font-size: 7pt;
   font-weight: 900;
