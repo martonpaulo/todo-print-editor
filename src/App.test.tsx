@@ -675,7 +675,7 @@ describe('App', () => {
     ).toHaveValue(COPY.starter.priorities)
   })
 
-  it('saves a PDF through the same dialog as printing, and is blocked with it', async () => {
+  it('opens the same dialog as printing for a PDF, and is blocked with it', async () => {
     const user = userEvent.setup()
     stubLayout({ listHeight: 100, panelHeight: 900 })
     const print = vi.fn()
@@ -684,15 +684,17 @@ describe('App', () => {
     render(<App />)
     const saveButton = await screen.findByRole('button', { name: COPY.savePdf })
 
-    // One dialog, two destinations, so one description carries the settings for both.
+    // One dialog, two destinations, so one description carries the settings for both. The name
+    // says the dialog opens: no page can preselect the destination it will show.
     expect(saveButton).toHaveAccessibleDescription(COPY.printDialogHint)
+    expect(saveButton).toHaveAccessibleName('Print or save as PDF')
     expect(saveButton.closest('.screen-only')).not.toBeNull()
 
     await user.click(saveButton)
     expect(print).toHaveBeenCalledOnce()
   })
 
-  it('blocks saving a PDF while a list is too tall for a panel', async () => {
+  it('blocks the PDF dialog while a list is too tall for a panel', async () => {
     stubLayout({ listHeight: 2000, panelHeight: 900 })
 
     render(<App />)

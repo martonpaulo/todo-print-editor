@@ -112,8 +112,9 @@ Choose **Print A4**, then verify these values in the browser or system print dia
 
 The application defines physical millimeter dimensions and `@page { size: A4 landscape; margin: 0; }`, but web applications cannot force printer-driver settings. A printer that cannot print edge-to-edge may still impose a hardware margin.
 
-**Save as PDF** opens the same dialog; choose *Save as PDF* as the destination, with the same
-settings. Both actions are blocked while an oversized list or a Markdown error would produce a
+**Print or save as PDF** opens the same dialog; choose *Save as PDF* as the destination, with the
+same settings. A web page cannot preselect that destination, so the dialog opens with whatever you
+last used. Both actions are blocked while an oversized list or a Markdown error would produce a
 clipped page.
 
 ### Markdown files

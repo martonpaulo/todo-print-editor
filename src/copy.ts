@@ -49,7 +49,11 @@ export const COPY = {
   print: 'Print A4',
   // The same dialog produces both outputs: paper when a printer is the destination, a file when
   // “Save as PDF” is. One hint therefore describes both actions instead of repeating the settings.
-  savePdf: 'Save as PDF',
+  //
+  // The name says the dialog opens, not that a file is written, because no page can choose that
+  // dialog's destination: it opens with whatever the user last selected, which may be a printer.
+  // Naming the save alone would promise an outcome this action cannot guarantee.
+  savePdf: 'Print or save as PDF',
   printDialogHint:
     'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. To save a file instead, choose “Save as PDF” as the destination. Printers without edge-to-edge support may still add a margin.',
   exportMarkdown: 'Export Markdown',

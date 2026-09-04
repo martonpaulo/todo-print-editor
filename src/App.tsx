@@ -386,8 +386,10 @@ const App = () => {
                 {COPY.importMarkdownHint}
               </p>
 
-              {/* Both destinations are the same dialog, so saving a PDF obeys the same block:
-                  a document that cannot be laid out cannot be written to a file either. */}
+              {/* The same dialog as Print A4, named for the file a user comes looking for: no
+                  page can preselect its destination, so the name says the dialog opens rather
+                  than promising a saved file. It obeys the same block, because a document that
+                  cannot be laid out cannot be written to a file either. */}
               <button
                 className="secondary-button"
                 type="button"
