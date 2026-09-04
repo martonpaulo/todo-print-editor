@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import { COPY } from '../copy'
 import { createList, createPanelBreak, createTodoItem } from '../domain/document'
 import {
@@ -30,6 +30,17 @@ const focusElement = (elementId: string) => {
 
 const focusItem = (itemId: string) => focusElement(`item-${itemId}`)
 
+// A confirmation replaces the control that opened it, so declining has to put
+// focus back on an element that exists again only after the next render. The
+// id is derived from the same target the pending removal names.
+type PendingRemoval = { kind: 'list' | 'task'; id: string }
+
+const removeControlId = ({ kind, id }: PendingRemoval) => `remove-${kind}-${id}`
+
+// Removing the last list leaves nothing in the stack to hold focus, so the
+// action that rebuilds one is the landing point.
+const ADD_LIST_ID = 'add-list'
+
 export const VisualEditor = ({
   document,
   overflowListIds,
@@ -41,9 +52,24 @@ export const VisualEditor = ({
   // destructive rule also names what it removed, so the recovery affordance is
   // built from the same context string as the control's accessible name; this
   // component keeps no deletion buffer of its own.
+  //
+  // Only one removal is ever awaiting confirmation: opening a second question
+  // answers the first with a decline, which is what the user is doing by
+  // reaching for another control instead of this one.
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null)
+
   const apply = (next: TodoDocument, edit?: DocumentEdit) => {
+    setPendingRemoval(null)
     if (next === document) return
     onChange(next, edit)
+  }
+
+  const isConfirming = (kind: PendingRemoval['kind'], id: string) =>
+    pendingRemoval?.kind === kind && pendingRemoval.id === id
+
+  const cancelRemoval = (target: PendingRemoval) => {
+    setPendingRemoval(null)
+    focusElement(removeControlId(target))
   }
 
   const addItemAfter = (listId: string, itemId?: string) => {
@@ -55,6 +81,19 @@ export const VisualEditor = ({
   const deleteItem = (listId: string, itemId: string, subject: string, focusId?: string) => {
     apply(removeItem(document, listId, itemId), { kind: 'task-removed', subject })
     focusElement(focusId ? `item-${focusId}` : `add-task-${listId}`)
+  }
+
+  // A confirmed removal unmounts the button that was holding focus, so the
+  // caret lands on the neighbouring list the way a removed task lands on its
+  // neighbouring row. Only lists carry a title field, so the panel breaks
+  // between them are not candidates.
+  const deleteList = (blockId: string, subject: string) => {
+    const lists = document.blocks.filter((block) => block.kind === 'list')
+    const removedIndex = lists.findIndex((block) => block.id === blockId)
+    const neighbour = lists[removedIndex + 1] ?? lists[removedIndex - 1]
+
+    apply(removeBlock(document, blockId), { kind: 'list-removed', subject })
+    focusElement(neighbour ? `title-${neighbour.id}` : ADD_LIST_ID)
   }
 
   const listNumbers = new Map(
@@ -113,40 +152,63 @@ export const VisualEditor = ({
               <header className="list-card__header">
                 <span className="eyebrow">{COPY.listNumber(currentListNumber, listNumbers.size)}</span>
                 <div className="list-card__actions">
-                  <button
-                    className="icon-button"
-                    type="button"
-                    disabled={blockIndex === 0}
-                    aria-label={COPY.moveListUpLabel(listContext)}
-                    title={COPY.moveListUp}
-                    onClick={() => apply(moveBlock(document, block.id, -1))}
-                  >
-                    <Icon name="arrow-up" size={16} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    disabled={blockIndex === document.blocks.length - 1}
-                    aria-label={COPY.moveListDownLabel(listContext)}
-                    title={COPY.moveListDown}
-                    onClick={() => apply(moveBlock(document, block.id, 1))}
-                  >
-                    <Icon name="arrow-down" size={16} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={COPY.removeListLabel(listContext)}
-                    title={COPY.removeList}
-                    onClick={() =>
-                      apply(removeBlock(document, block.id), {
-                        kind: 'list-removed',
-                        subject: listContext,
-                      })
-                    }
-                  >
-                    <Icon name="trash" size={16} />
-                  </button>
+                  {isConfirming('list', block.id) ? (
+                    <div className="confirm-action" role="group" aria-label={COPY.confirmRemoveList}>
+                      <span className="confirm-action__question">{COPY.confirmRemoveList}</span>
+                      <button
+                        className="confirm-action__accept"
+                        type="button"
+                        // The question replaces the control that raised it, so
+                        // focus follows it rather than falling to the body.
+                        autoFocus
+                        aria-label={COPY.confirmRemoveListLabel(listContext)}
+                        onClick={() => deleteList(block.id, listContext)}
+                      >
+                        {COPY.confirmRemoval}
+                      </button>
+                      <button
+                        className="confirm-action__decline"
+                        type="button"
+                        aria-label={COPY.cancelRemoveListLabel(listContext)}
+                        onClick={() => cancelRemoval({ kind: 'list', id: block.id })}
+                      >
+                        {COPY.cancelRemoval}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        disabled={blockIndex === 0}
+                        aria-label={COPY.moveListUpLabel(listContext)}
+                        title={COPY.moveListUp}
+                        onClick={() => apply(moveBlock(document, block.id, -1))}
+                      >
+                        <Icon name="arrow-up" size={16} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        disabled={blockIndex === document.blocks.length - 1}
+                        aria-label={COPY.moveListDownLabel(listContext)}
+                        title={COPY.moveListDown}
+                        onClick={() => apply(moveBlock(document, block.id, 1))}
+                      >
+                        <Icon name="arrow-down" size={16} />
+                      </button>
+                      <button
+                        id={removeControlId({ kind: 'list', id: block.id })}
+                        className="icon-button"
+                        type="button"
+                        aria-label={COPY.removeListLabel(listContext)}
+                        title={COPY.removeList}
+                        onClick={() => setPendingRemoval({ kind: 'list', id: block.id })}
+                      >
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </header>
 
@@ -220,22 +282,68 @@ export const VisualEditor = ({
                           }
                         }}
                       />
-                      <button
-                        className="icon-button icon-button--quiet"
-                        type="button"
-                        aria-label={COPY.removeTaskLabel(taskContext, listContext)}
-                        title={COPY.removeTask}
-                        onClick={() =>
-                          deleteItem(
-                            block.id,
-                            item.id,
-                            taskContext,
-                            block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
-                          )
-                        }
-                      >
-                        <Icon name="trash" size={15} />
-                      </button>
+                      {isConfirming('task', item.id) ? (
+                        <div
+                          className="confirm-action"
+                          role="group"
+                          aria-label={COPY.confirmRemoveTask}
+                        >
+                          <span className="confirm-action__question">
+                            {COPY.confirmRemoveTask}
+                          </span>
+                          <button
+                            className="confirm-action__accept"
+                            type="button"
+                            autoFocus
+                            aria-label={COPY.confirmRemoveTaskLabel(taskContext, listContext)}
+                            onClick={() =>
+                              deleteItem(
+                                block.id,
+                                item.id,
+                                taskContext,
+                                block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
+                              )
+                            }
+                          >
+                            {COPY.confirmRemoval}
+                          </button>
+                          <button
+                            className="confirm-action__decline"
+                            type="button"
+                            aria-label={COPY.cancelRemoveTaskLabel(taskContext, listContext)}
+                            onClick={() => cancelRemoval({ kind: 'task', id: item.id })}
+                          >
+                            {COPY.cancelRemoval}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          id={removeControlId({ kind: 'task', id: item.id })}
+                          className="icon-button icon-button--quiet"
+                          type="button"
+                          aria-label={COPY.removeTaskLabel(taskContext, listContext)}
+                          title={COPY.removeTask}
+                          // A task that still holds text is written content, so
+                          // its removal asks first. An empty task is not, and
+                          // asking about it would put a question between the
+                          // user and every discarded blank row.
+                          onClick={() => {
+                            if (item.text.trim()) {
+                              setPendingRemoval({ kind: 'task', id: item.id })
+                              return
+                            }
+
+                            deleteItem(
+                              block.id,
+                              item.id,
+                              taskContext,
+                              block.items[itemIndex - 1]?.id ?? block.items[itemIndex + 1]?.id,
+                            )
+                          }}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      )}
                     </div>
                   )
                 })}
@@ -258,6 +366,7 @@ export const VisualEditor = ({
 
       <div className="editor-add-actions">
         <button
+          id={ADD_LIST_ID}
           className="secondary-button"
           type="button"
           onClick={() => apply(appendBlock(document, createList('')))}

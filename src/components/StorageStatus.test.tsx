@@ -1,8 +1,26 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { StorageStatus } from './StorageStatus'
 import { COPY } from '../copy'
+import type { PersistenceStatus } from '../hooks/usePersistentDocument'
+
+// Replacing the stored document is the only thing that leaves the load-failed
+// state, and it takes the whole recovery region with it. The real hook drives
+// that transition, so the test has to drive it too: asserting that the callback
+// ran says nothing about where focus is once the region is gone.
+const Harness = ({ resultingStatus }: { resultingStatus: PersistenceStatus }) => {
+  const [status, setStatus] = useState<PersistenceStatus>('load-failed')
+
+  return (
+    <StorageStatus
+      status={status}
+      hasUnsavedDraft={false}
+      onReplaceStoredDocument={() => setStatus(resultingStatus)}
+    />
+  )
+}
 
 afterEach(cleanup)
 
@@ -36,8 +54,58 @@ describe('StorageStatus', () => {
     // The load failure must not read as saved either.
     expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
 
+    // Overwriting the stored copy is destructive and no undo reaches it, so it
+    // asks before it runs.
     await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    expect(onReplaceStoredDocument).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.cancelReplaceStoredDocument }))
+    expect(onReplaceStoredDocument).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    const confirm = screen.getByRole('button', { name: COPY.confirmReplacement })
+    expect(confirm).toHaveFocus()
+    await userEvent.click(confirm)
     expect(onReplaceStoredDocument).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands focus to the resulting state line when the replacement completes', async () => {
+    render(<Harness resultingStatus="saved" />)
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    await userEvent.click(screen.getByRole('button', { name: COPY.confirmReplacement }))
+
+    // The recovery region and the button that held focus are both gone, so the
+    // state line the action produced is what receives it.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const state = screen.getByRole('status')
+    expect(state).toHaveTextContent(COPY.savedLocally)
+    await waitFor(() => expect(state).toHaveFocus())
+  })
+
+  it('hands focus to the same line when the replacement is refused by storage', async () => {
+    render(<Harness resultingStatus="write-failed" />)
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    await userEvent.click(screen.getByRole('button', { name: COPY.confirmReplacement }))
+
+    const state = screen.getByRole('status')
+    expect(state).toHaveTextContent(COPY.saveFailed)
+    expect(screen.getByText(COPY.saveFailedDescription)).toBeInTheDocument()
+    await waitFor(() => expect(state).toHaveFocus())
+  })
+
+  it('keeps focus on the recovery action when the failure state survives', async () => {
+    render(<Harness resultingStatus="load-failed" />)
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    await userEvent.click(screen.getByRole('button', { name: COPY.confirmReplacement }))
+
+    // The region is still on screen, so the control the user would reach for
+    // next is the one they just used, not the state line behind it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: COPY.replaceStoredDocument })).toHaveFocus(),
+    )
   })
 
   it('claims no save while an editor draft is waiting outside the model', () => {

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COPY } from '../copy'
@@ -171,6 +171,9 @@ describe('VisualEditor checkbox target', () => {
     const remove = screen.getByRole('button', { name: 'Remove Task 1: Draft from List 1: Work' })
     expect(remove.closest('label')).toBeNull()
     await user.click(remove)
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm removing Task 1: Draft from List 1: Work' }),
+    )
 
     const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
     const list = next.blocks[0]
@@ -219,5 +222,160 @@ describe('VisualEditor overflow guidance', () => {
     renderEditor()
 
     expect(screen.queryByText(COPY.listOverflow)).not.toBeInTheDocument()
+  })
+})
+
+describe('VisualEditor destructive confirmation', () => {
+  afterEach(cleanup)
+
+  it('leaves the document untouched until a list removal is confirmed', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 1: Work' }))
+    expect(onChange).not.toHaveBeenCalled()
+
+    // The question names the target it belongs to, and the accept control
+    // carries the same context every other repeated control does.
+    expect(screen.getByRole('group', { name: COPY.confirmRemoveList })).toBeInTheDocument()
+    const confirm = screen.getByRole('button', { name: 'Confirm removing List 1: Work' })
+    expect(confirm).toHaveFocus()
+
+    await user.click(confirm)
+
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    expect(next.blocks.map((block) => block.id)).toEqual(['list-b', 'list-c'])
+    expect(onChange.mock.calls.at(-1)?.[1]).toEqual({
+      kind: 'list-removed',
+      subject: 'List 1: Work',
+    })
+
+    // Confirming unmounts the control that was holding focus, so it lands on
+    // the neighbouring list rather than falling out of the editor to the body.
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Title of List 2: Work' })).toHaveFocus(),
+    )
+  })
+
+  it('lands on the previous list when the last one is removed', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 3' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm removing List 3' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Title of List 2: Work' })).toHaveFocus(),
+    )
+  })
+
+  it('lands on the add-list action when the only list is removed', async () => {
+    const user = userEvent.setup()
+    const document = buildDocument()
+    document.blocks = document.blocks.slice(0, 1)
+    renderEditor(document)
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 1: Work' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm removing List 1: Work' }))
+
+    // Nothing is left in the stack to hold focus, so the action that rebuilds
+    // a list is the landing point.
+    await waitFor(() => expect(screen.getByRole('button', { name: COPY.addList })).toHaveFocus())
+  })
+
+  it('keeps the list and returns focus to its remove control when declined', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 1: Work' }))
+    await user.click(screen.getByRole('button', { name: 'Keep List 1: Work' }))
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'List 1: Work' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: COPY.confirmRemoveList })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove List 1: Work' })).toHaveFocus(),
+    )
+  })
+
+  it('answers a list confirmation with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    screen.getByRole('button', { name: 'Remove List 1: Work' }).focus()
+    await user.keyboard('{Enter}')
+
+    // Focus already sits on the accept control, so confirming needs no pointer
+    // and no knowledge of where the question was inserted.
+    await user.keyboard('{Enter}')
+
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    expect(next.blocks.map((block) => block.id)).toEqual(['list-b', 'list-c'])
+  })
+
+  it('asks before removing a task that holds text, and only that task', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Remove Task 1: Draft from List 1: Work' }),
+    )
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('group', { name: COPY.confirmRemoveTask })).toBeInTheDocument()
+    // The question replaces only its own control; every other row keeps one.
+    expect(
+      screen.getByRole('button', { name: 'Remove Task 1: Draft from List 2: Work' }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm removing Task 1: Draft from List 1: Work' }),
+    )
+
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    const list = next.blocks[0]
+    expect(list.kind === 'list' && list.items.map((item) => item.id)).toEqual(['item-a2'])
+  })
+
+  it('keeps the task and returns focus to its remove control when declined', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Remove Task 1: Draft from List 1: Work' }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Keep Task 1: Draft in List 1: Work' }))
+
+    expect(onChange).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Remove Task 1: Draft from List 1: Work' }),
+      ).toHaveFocus(),
+    )
+  })
+
+  it('removes an empty task without a question', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    // An empty row holds nothing to lose, so confirming it would only put a
+    // question between the user and every discarded blank line.
+    await user.click(screen.getByRole('button', { name: 'Remove Task 2 from List 1: Work' }))
+
+    expect(screen.queryByRole('group', { name: COPY.confirmRemoveTask })).not.toBeInTheDocument()
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    const list = next.blocks[0]
+    expect(list.kind === 'list' && list.items.map((item) => item.id)).toEqual(['item-a1'])
+  })
+
+  it('abandons a pending question when another control is used', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Remove List 1: Work' }))
+    await user.click(screen.getByRole('button', { name: 'Move List 2: Work up' }))
+
+    expect(screen.queryByRole('group', { name: COPY.confirmRemoveList })).not.toBeInTheDocument()
+    const next = onChange.mock.calls.at(-1)?.[0] as TodoDocument
+    expect(next.blocks.map((block) => block.id)).toEqual(['list-b', 'list-a', 'list-c'])
   })
 })

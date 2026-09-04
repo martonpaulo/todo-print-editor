@@ -29,6 +29,13 @@ export const COPY = {
   loadFailedDescription:
     'The document stored in this browser is unreadable, so a starter document is shown instead. Nothing is being saved, and the stored content is kept until you replace it. Copy this draft from the Markdown view first if you want to keep it.',
   replaceStoredDocument: 'Replace the stored document',
+  // Overwriting the unreadable stored value is the one destructive action no
+  // undo reaches, because the document history never held the copy it
+  // discards. It is therefore the one that most needs to ask first.
+  confirmReplaceStoredDocument: 'Replace the stored document?',
+  confirmReplacement: 'Replace',
+  cancelReplacement: 'Keep',
+  cancelReplaceStoredDocument: 'Keep the stored document',
   visualMode: 'Visual',
   markdownMode: 'Markdown',
   editorMode: 'Editor mode',
@@ -68,6 +75,15 @@ export const COPY = {
   // that does not depend on knowing a keyboard shortcut.
   undoRemoval: 'Undo removal',
   removedPanelBreak: 'Panel break removed.',
+  // Removing a list, or a task that still holds text, destroys written content
+  // in one click, so the control asks in place before the document changes. The
+  // question replaces the control it belongs to, which keeps the confirmation
+  // beside its target instead of in a dialog that moves focus out of the list.
+  // An empty task has nothing to lose, so it is removed without the question.
+  confirmRemoveList: 'Remove this list?',
+  confirmRemoveTask: 'Remove this task?',
+  confirmRemoval: 'Remove',
+  cancelRemoval: 'Keep',
   markdownLabel: 'Markdown source',
   markdownHelp:
     'Use optional ## headings for list titles, - [ ] for tasks, # YYYY-MM-DD for the optional date, and --- to start a new panel.',
@@ -117,6 +133,8 @@ export const COPY = {
   moveListUpLabel: (list: string) => `Move ${list} up`,
   moveListDownLabel: (list: string) => `Move ${list} down`,
   removeListLabel: (list: string) => `Remove ${list}`,
+  confirmRemoveListLabel: (list: string) => `Confirm removing ${list}`,
+  cancelRemoveListLabel: (list: string) => `Keep ${list}`,
   addTaskLabel: (list: string) => `Add task to ${list}`,
 
   removedTask: (task: string) => `${task} removed.`,
@@ -125,6 +143,8 @@ export const COPY = {
   taskTextLabel: (task: string, list: string) => `${task} in ${list}`,
   taskCompleteLabel: (task: string, list: string) => `Mark ${task} in ${list} complete`,
   removeTaskLabel: (task: string, list: string) => `Remove ${task} from ${list}`,
+  confirmRemoveTaskLabel: (task: string, list: string) => `Confirm removing ${task} from ${list}`,
+  cancelRemoveTaskLabel: (task: string, list: string) => `Keep ${task} in ${list}`,
 
   markdownErrors: MARKDOWN_ERROR_MESSAGES,
 
