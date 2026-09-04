@@ -62,14 +62,16 @@ jobs:
       # ~/.cache/puppeteer, and npm 11 skips lifecycle scripts by default, so Puppeteer's postinstall
       # never provisions it; tests/print-geometry/geometry.test.ts falls back to
       # `npx puppeteer browsers install chrome` on first launch and populates exactly this path.
-      # The key is the lockfile because the Chrome build is pinned by the resolved Puppeteer version,
-      # which only moves when the lockfile does. No restore-keys: a partial hit would supply a Chrome
-      # for a different version, which fails at launch instead of falling through to a download.
+      # The key covers both files that can move the pinned build: package-lock.json fixes the resolved
+      # Puppeteer version, and .puppeteerrc.cjs overrides the Chrome revision that version carries.
+      # Either one changing has to miss. The lockfile alone stopped being sufficient in #45, which
+      # added the override. No restore-keys: a partial hit would supply a Chrome for a different
+      # build, which fails at launch instead of falling through to a download.
       - name: Cache Puppeteer browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/puppeteer
-          key: puppeteer-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('package-lock.json', '.puppeteerrc.cjs') }}
       # One step, running the same `check` a developer runs locally: lint, the browser-free suite,
       # the printed-page geometry check and the build. Kept as a single step on purpose -- three
       # separate steps let CI's definition of "validated" drift away from package.json's, which is
