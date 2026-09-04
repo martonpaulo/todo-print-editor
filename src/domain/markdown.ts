@@ -133,6 +133,9 @@ export const reconcileMarkdownDraft = (
   // Moon type is a rendering setting with no Markdown syntax, so it survives a round trip through
   // the source instead of being serialized into it.
   typography: previousDocument.typography,
+  // The same holds for the print rotation: it is set once for the user's own printer and means
+  // nothing in a file they hand to someone else, so it is carried across rather than serialized.
+  rotatePrint: previousDocument.rotatePrint,
   blocks: draft.blocks.map((block, blockIndex) => {
     const previousBlock = previousDocument.blocks[blockIndex]
 

@@ -45,5 +45,6 @@ export const createDocument = (blocks: DocumentBlock[]): TodoDocument => ({
   showDate: true,
   showPanelNumbers: true,
   typography: 'latin',
+  rotatePrint: false,
   blocks,
 })
