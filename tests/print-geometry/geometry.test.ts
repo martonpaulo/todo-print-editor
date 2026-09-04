@@ -28,6 +28,15 @@ const EPSILON_MM = 0.05
 const FLOOR_RECORDED_ON_34_MM = 209
 
 const pxToMm = (px: number): number => (px * MM_PER_INCH) / PX_PER_INCH
+
+/**
+ * Chromium stores a used length as a LayoutUnit, a fixed-point value quantised to 1/64 px, while a
+ * painted shadow spread keeps its float. Two strokes resolved from one token can therefore differ
+ * by up to one quantum. Not a permitted design tolerance: 1/64 px is ~0.004mm, four times finer
+ * than a 600dpi printer dot, so anything within it prints as the same weight and anything beyond it
+ * is a real divergence.
+ */
+const LAYOUT_UNIT_MM = pxToMm(1 / 64)
 const pointsToMm = (points: number): number => (points * MM_PER_INCH) / POINTS_PER_INCH
 
 /** Round to the tenth of a millimetre, so aggregate comparisons read as physical dimensions. */
@@ -166,6 +175,18 @@ interface MoonGeometry {
 }
 
 /**
+ * The used width of each stroke `--print-stroke-width` owns, in millimetres: the divider box, the
+ * list rule and the checkbox frame. Equality here is the printed weight, and it does not follow
+ * from the shared token alone — a `border` resolves the same declaration to a different used width
+ * than painted ink does, which is how these three came to print at three weights (#32).
+ */
+interface StrokeWidths {
+  dividerMm: number
+  ruleMm: number
+  checkboxMm: number
+}
+
+/**
  * Every measurement is taken once, up front, and each test is a pure assertion over the result.
  * Browser work inside a test body would be swallowed by the `fails` markers below, which turn any
  * rejection into a pass — a navigation error or a missing `/MediaBox` would then read as the known
@@ -186,6 +207,7 @@ describe('printed page geometry', () => {
   let latinStrike = { decoration: '', paintedMm: 0 }
   let moonStrike = { decoration: '', paintedMm: 0 }
   let moonGeometry: MoonGeometry | null = null
+  let strokes: StrokeWidths | null = null
 
   const measureSheets = async (): Promise<MeasuredSheet[]> => {
     const raw = await page.evaluate(() =>
@@ -311,6 +333,38 @@ describe('printed page geometry', () => {
       })
       .then(({ decoration, paintedPx }) => ({ decoration, paintedMm: pxToMm(paintedPx) }))
 
+  /**
+   * The three strokes the print tokens declare as one weight, read as used widths rather than as
+   * declarations: the divider is a pseudo-element, the list rule a filled block, and the checkbox a
+   * border, so nothing but the resolved width compares them.
+   */
+  const measureStrokes = async (): Promise<StrokeWidths> =>
+    page
+      .evaluate(() => {
+        const panel = window.document.querySelector(
+          '.preview-stage .print-page > .print-panel:not(:last-child)',
+        )
+        const rule = window.document.querySelector('.preview-stage .print-list__rule')
+        const checkbox = window.document.querySelector('.preview-stage .print-checkbox')
+        if (!panel || !rule || !checkbox) {
+          throw new Error('The stroke document rendered no divider, rule or checkbox')
+        }
+
+        return {
+          dividerPx: Number.parseFloat(window.getComputedStyle(panel, '::after').width),
+          rulePx: Number.parseFloat(window.getComputedStyle(rule).height),
+          // `inset 0 0 0 <spread>`: the fourth length is the frame's width.
+          checkboxPx: Number.parseFloat(
+            window.getComputedStyle(checkbox).boxShadow.match(/(-?[\d.]+)px/g)?.[3] ?? 'NaN',
+          ),
+        }
+      })
+      .then(({ dividerPx, rulePx, checkboxPx }) => ({
+        dividerMm: pxToMm(dividerPx),
+        ruleMm: pxToMm(rulePx),
+        checkboxMm: pxToMm(checkboxPx),
+      }))
+
   const measureMoonGeometry = async (): Promise<MoonGeometry> =>
     page.evaluate((alphabet: string) => {
       const title = window.document.querySelector('.preview-stage .print-list__title .moon-text')
@@ -426,6 +480,11 @@ describe('printed page geometry', () => {
 
     await renderDocument(appUrl, moonGeometryDocument)
     moonGeometry = await measureMoonGeometry()
+
+    // A full sheet is the only shape that carries all three strokes at once: a partial sheet drops
+    // the divider beside its fillers.
+    await render(appUrl, contract.panelsPerPage)
+    strokes = await measureStrokes()
   }, 300_000)
 
   afterAll(async () => {
@@ -493,6 +552,19 @@ describe('printed page geometry', () => {
     // painted, and this asserts that something paints it.
     expect(moonStrike.paintedMm).toBeGreaterThan(0)
     expect(moonStrike.decoration).toBe('none')
+  })
+
+  it('draws the panel divider, the list rule and the checkbox frame at one weight', () => {
+    const measuredStrokes = strokes
+    if (!measuredStrokes) throw new Error('No stroke widths were collected')
+
+    expect(measuredStrokes.dividerMm).toBeGreaterThan(0)
+    expect(Math.abs(measuredStrokes.ruleMm - measuredStrokes.dividerMm)).toBeLessThanOrEqual(
+      LAYOUT_UNIT_MM,
+    )
+    expect(Math.abs(measuredStrokes.checkboxMm - measuredStrokes.dividerMm)).toBeLessThanOrEqual(
+      LAYOUT_UNIT_MM,
+    )
   })
 
   it('keeps the printed geometry identical when the document uses Moon typography', () => {
