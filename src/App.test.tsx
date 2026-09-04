@@ -16,6 +16,27 @@ const stubLayout = ({ listHeight, panelHeight }: { listHeight: number; panelHeig
   })
 }
 
+// Removing written content asks first, so every removal in these tests answers
+// the question the control raises. The helpers keep that one extra click from
+// obscuring what each test is actually about.
+const removeTask = async (
+  user: ReturnType<typeof userEvent.setup>,
+  taskContext: string,
+  listContext: string,
+) => {
+  await user.click(
+    screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
+  )
+  await user.click(
+    screen.getByRole('button', { name: COPY.confirmRemoveTaskLabel(taskContext, listContext) }),
+  )
+}
+
+const removeList = async (user: ReturnType<typeof userEvent.setup>, listContext: string) => {
+  await user.click(screen.getByRole('button', { name: COPY.removeListLabel(listContext) }))
+  await user.click(screen.getByRole('button', { name: COPY.confirmRemoveListLabel(listContext) }))
+}
+
 describe('App', () => {
   // The test environment does not implement matchMedia, which PrintPreview
   // queries to skip measurement while the print stylesheet is active.
@@ -255,6 +276,7 @@ describe('App', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe('{ not a document')
 
     await user.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    await user.click(screen.getByRole('button', { name: COPY.confirmReplacement }))
 
     expect(
       screen.queryByRole('alert', { name: COPY.loadFailedTitle }),
@@ -291,9 +313,7 @@ describe('App', () => {
 
     const listContext = COPY.listContext(1, COPY.starter.priorities)
     const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
-    await user.click(
-      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
-    )
+    await removeTask(user, taskContext, listContext)
 
     expect(
       screen.queryByRole('textbox', { name: `${taskContext} in ${listContext}` }),
@@ -333,9 +353,7 @@ describe('App', () => {
     // window. The status names one task, so its Undo must restore that task
     // without discarding the text typed a moment earlier.
     const removedTask = COPY.taskContext(1, COPY.starter.priorityItems[0])
-    await user.click(
-      screen.getByRole('button', { name: COPY.removeTaskLabel(removedTask, listContext) }),
-    )
+    await removeTask(user, removedTask, listContext)
     await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
 
     expect(
@@ -358,22 +376,8 @@ describe('App', () => {
     const taskName = (position: number, text: string) =>
       `${COPY.taskContext(position, text)} in ${listContext}`
 
-    await user.click(
-      screen.getByRole('button', {
-        name: COPY.removeTaskLabel(
-          COPY.taskContext(1, COPY.starter.priorityItems[0]),
-          listContext,
-        ),
-      }),
-    )
-    await user.click(
-      screen.getByRole('button', {
-        name: COPY.removeTaskLabel(
-          COPY.taskContext(1, COPY.starter.priorityItems[1]),
-          listContext,
-        ),
-      }),
-    )
+    await removeTask(user, COPY.taskContext(1, COPY.starter.priorityItems[0]), listContext)
+    await removeTask(user, COPY.taskContext(1, COPY.starter.priorityItems[1]), listContext)
 
     await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
 
@@ -399,7 +403,7 @@ describe('App', () => {
     render(<App />)
 
     const listContext = COPY.listContext(1, COPY.starter.priorities)
-    await user.click(screen.getByRole('button', { name: COPY.removeListLabel(listContext) }))
+    await removeList(user, listContext)
 
     expect(screen.getByText(COPY.removedList(listContext))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
@@ -414,9 +418,7 @@ describe('App', () => {
     const listContext = COPY.listContext(1, COPY.starter.priorities)
     const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
     const taskName = `${taskContext} in ${listContext}`
-    await user.click(
-      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
-    )
+    await removeTask(user, taskContext, listContext)
 
     // A delayed undo must still work, and must leave the reverted document
     // available to redo rather than consuming its own branch.
@@ -438,9 +440,7 @@ describe('App', () => {
 
     const listContext = COPY.listContext(1, COPY.starter.priorities)
     const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
-    await user.click(
-      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
-    )
+    await removeTask(user, taskContext, listContext)
 
     const remainingTask = screen.getByRole('textbox', {
       name: `${COPY.taskContext(1, COPY.starter.priorityItems[1])} in ${listContext}`,
@@ -460,9 +460,7 @@ describe('App', () => {
     const listContext = COPY.listContext(1, COPY.starter.priorities)
     const taskContext = COPY.taskContext(1, COPY.starter.priorityItems[0])
     const taskName = `${taskContext} in ${listContext}`
-    await user.click(
-      screen.getByRole('button', { name: COPY.removeTaskLabel(taskContext, listContext) }),
-    )
+    await removeTask(user, taskContext, listContext)
     await user.click(screen.getByRole('button', { name: COPY.undoRemoval }))
 
     // A divergent edit made immediately after the undo, inside the coalescing

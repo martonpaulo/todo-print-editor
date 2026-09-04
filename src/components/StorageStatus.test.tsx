@@ -36,7 +36,18 @@ describe('StorageStatus', () => {
     // The load failure must not read as saved either.
     expect(screen.getByRole('status')).toHaveTextContent(COPY.saveFailed)
 
+    // Overwriting the stored copy is destructive and no undo reaches it, so it
+    // asks before it runs.
     await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    expect(onReplaceStoredDocument).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.cancelReplaceStoredDocument }))
+    expect(onReplaceStoredDocument).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: COPY.replaceStoredDocument }))
+    const confirm = screen.getByRole('button', { name: COPY.confirmReplacement })
+    expect(confirm).toHaveFocus()
+    await userEvent.click(confirm)
     expect(onReplaceStoredDocument).toHaveBeenCalledTimes(1)
   })
 

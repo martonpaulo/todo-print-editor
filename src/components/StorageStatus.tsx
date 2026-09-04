@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { COPY } from '../copy'
 import { Icon } from './Icon'
 import type { PersistenceStatus } from '../hooks/usePersistentDocument'
@@ -24,6 +24,10 @@ export const StorageStatus = ({
   onReplaceStoredDocument,
 }: StorageStatusProps) => {
   const recoveryRef = useRef<HTMLDivElement | null>(null)
+  const replaceRef = useRef<HTMLButtonElement | null>(null)
+  // Replacing the stored document destroys the only copy of it, so the action
+  // asks in place before it runs.
+  const [confirmingReplace, setConfirmingReplace] = useState(false)
 
   // A load failure is the one state the user must act on before the document is
   // stored again, so the recovery region takes focus once, when it appears.
@@ -73,9 +77,50 @@ export const StorageStatus = ({
           <div>
             <strong id="storage-recovery-title">{COPY.loadFailedTitle}</strong>
             <span>{COPY.loadFailedDescription}</span>
-            <button className="secondary-button" type="button" onClick={onReplaceStoredDocument}>
-              {COPY.replaceStoredDocument}
-            </button>
+            {confirmingReplace ? (
+              <div
+                className="confirm-action"
+                role="group"
+                aria-label={COPY.confirmReplaceStoredDocument}
+              >
+                <span className="confirm-action__question">
+                  {COPY.confirmReplaceStoredDocument}
+                </span>
+                <button
+                  className="confirm-action__accept"
+                  type="button"
+                  // The question replaces the control that raised it, so focus
+                  // follows it rather than falling out of the alert.
+                  autoFocus
+                  onClick={() => {
+                    setConfirmingReplace(false)
+                    onReplaceStoredDocument()
+                  }}
+                >
+                  {COPY.confirmReplacement}
+                </button>
+                <button
+                  className="confirm-action__decline"
+                  type="button"
+                  aria-label={COPY.cancelReplaceStoredDocument}
+                  onClick={() => {
+                    setConfirmingReplace(false)
+                    requestAnimationFrame(() => replaceRef.current?.focus())
+                  }}
+                >
+                  {COPY.cancelReplacement}
+                </button>
+              </div>
+            ) : (
+              <button
+                ref={replaceRef}
+                className="secondary-button"
+                type="button"
+                onClick={() => setConfirmingReplace(true)}
+              >
+                {COPY.replaceStoredDocument}
+              </button>
+            )}
           </div>
         </div>
       )}
