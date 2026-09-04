@@ -40,6 +40,7 @@ Treat these values as stable project decisions. Change an established identifier
 - The application has exactly one route and must opt out of search indexing.
 - User documents stay in browser `localStorage`; do not add accounts, analytics, remote storage, or a backend.
 - A printed page is A4 landscape (`297mm × 210mm`) containing three sequential `99mm × 210mm` panels.
+- Under `@media print` a printed panel is clamped to `209mm–210mm` tall. Chromium floors the printable page area to a whole CSS pixel, so the sheet fragments at `793px` (`209.81mm`) while a panel declared at the full `210mm` resolves to `793.70px`: it overflows by a fraction of a pixel and pushes a blank second sheet out of every document. The `209mm` floor is that allowance, deliberately below the measured `209.81mm` limit rather than at it; the `210mm` ceiling is the paper, and screen preview keeps the full `210mm`.
 - A list is atomic during pagination. Move the whole list to the next panel when it does not fit; never split it. Block printing when one list cannot fit an otherwise empty panel.
 - Render the optional date only on the first panel. Render optional panel numbering on every panel.
 - Rendered list content honors the document's `typography` setting. Moon type draws the 26 Latin letters as the geometric glyphs owned by `src/domain/moon.ts`, and an accented letter as the glyph of the base letter it canonically decomposes to; every other character keeps its Latin form. Panel numbering, the date, and the editor's own inputs are never drawn in Moon type.

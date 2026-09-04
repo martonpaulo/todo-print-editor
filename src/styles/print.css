@@ -309,6 +309,17 @@
     page-break-after: auto;
   }
 
+  /*
+   * The panel fills the sheet minus a whole-pixel allowance, and the floor is not a magic number:
+   * Chromium floors the printable page area to a whole CSS pixel, so a landscape A4 sheet fragments
+   * at 793px (209.81mm) while `210mm` resolves to 793.70px. A panel declared at the recorded height
+   * therefore overflows its own sheet by a fraction of a pixel and pushes a blank second sheet out
+   * of every document — measured on the three-panel document, where 209.80mm still prints one sheet
+   * and 209.85mm prints two. 209mm keeps ~3px of margin below that limit rather than sitting on it,
+   * because the page area also moves with the printer's own margins and the dialog's scale. The
+   * ceiling stays at the paper. AGENTS.md records this band; tests/print-geometry checks both the
+   * declaration and the rendered box against it.
+   */
   .print-panel {
     display: block !important;
     height: auto !important;
