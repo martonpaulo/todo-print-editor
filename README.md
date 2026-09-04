@@ -13,6 +13,7 @@ Design structured todo lists in a visual or Markdown editor, preview atomic `99m
 - Overflow preflight blocks clipped printouts
 - Optional first-panel date and panel numbering
 - Optional Moon type typography, drawing list content in the 1845 geometric alphabet
+- Markdown export and import, and a PDF saved through the browser's own print path
 - Browser-only persistence with no account, backend, analytics, or content upload
 - Monochrome design tokens in `src/styles/tokens.css`
 
@@ -99,7 +100,7 @@ The outlines are drawn from the published Grade 1 shape descriptions and are aut
 `src/domain/moon.ts` rather than loaded from a font, so the repository ships no third-party
 typography asset.
 
-### Printing
+### Printing and saving a PDF
 
 Choose **Print A4**, then verify these values in the browser or system print dialog:
 
@@ -110,6 +111,19 @@ Choose **Print A4**, then verify these values in the browser or system print dia
 - Headers and footers: off
 
 The application defines physical millimeter dimensions and `@page { size: A4 landscape; margin: 0; }`, but web applications cannot force printer-driver settings. A printer that cannot print edge-to-edge may still impose a hardware margin.
+
+**Save as PDF** opens the same dialog; choose *Save as PDF* as the destination, with the same
+settings. Both actions are blocked while an oversized list or a Markdown error would produce a
+clipped page.
+
+### Markdown files
+
+**Export Markdown** downloads the document as `todo-<date>.md`, holding exactly the source the
+Markdown view shows. **Import Markdown** reads such a file back and replaces the current document;
+the replacement is one undo step. A file whose Markdown does not parse changes nothing: its source
+opens in the Markdown view with the numbered errors that reject it.
+
+The file is an export, not a second place the document lives. Browser storage stays canonical.
 
 ## Design tokens
 

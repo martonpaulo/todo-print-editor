@@ -471,6 +471,146 @@ describe('App', () => {
     expect(screen.getByRole('textbox', { name: taskName })).toBeInTheDocument()
   })
 
+  it('downloads the document as a Markdown file named after its date', async () => {
+    const user = userEvent.setup()
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob)
+        return 'blob:document'
+      }),
+      revokeObjectURL: vi.fn(),
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<App />)
+    const exportButton = screen.getByRole('button', { name: COPY.exportMarkdown })
+    await user.click(exportButton)
+
+    const link = click.mock.instances[0] as HTMLAnchorElement
+    expect(link.download).toMatch(/^todo-\d{4}-\d{2}-\d{2}\.md$/)
+    await expect(blobs[0].text()).resolves.toContain(`## ${COPY.starter.priorities}`)
+
+    // The export is a screen action, so the print stylesheet hides it with the toolbar.
+    expect(exportButton.closest('.screen-only')).not.toBeNull()
+  })
+
+  it('exports the document even while an oversized list blocks printing', async () => {
+    const user = userEvent.setup()
+    stubLayout({ listHeight: 2000, panelHeight: 900 })
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob)
+        return 'blob:document'
+      }),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<App />)
+    await screen.findByRole('button', { name: COPY.printBlocked })
+    await user.click(screen.getByRole('button', { name: COPY.exportMarkdown }))
+
+    expect(blobs).toHaveLength(1)
+  })
+
+  it('replaces the document with an imported Markdown file, and undo restores it', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+    const input = screen.getByLabelText(COPY.importMarkdown)
+
+    await user.upload(
+      input,
+      new File(['## Imported\n- [ ] From a file\n'], 'todo.md', { type: 'text/markdown' }),
+    )
+
+    const titles = () =>
+      screen.getAllByRole('textbox', { name: /^Title of / }).map((i) => (i as HTMLInputElement).value)
+    expect(titles()).toEqual(['Imported'])
+    expect(
+      screen.getByRole('textbox', { name: 'Task 1: From a file in List 1: Imported' }),
+    ).toBeInTheDocument()
+
+    // The import is a recorded edit, which is what the control's description promises.
+    expect(input).toHaveAccessibleDescription(COPY.importMarkdownHint)
+    fireEvent.keyDown(window.document.body, { key: 'z', ctrlKey: true })
+    expect(titles()).toEqual([
+      COPY.starter.priorities,
+      COPY.starter.smallWins,
+      COPY.starter.work,
+      COPY.starter.personal,
+    ])
+  })
+
+  it('keeps the document unchanged when the imported Markdown has errors', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.upload(
+      screen.getByLabelText(COPY.importMarkdown),
+      new File(['### Personal\n- [ ] Call someone\n'], 'todo.md', { type: 'text/markdown' }),
+    )
+
+    // The source is loaded into the Markdown view so the numbered errors point at it, while the
+    // canonical document is still the one the file never replaced.
+    expect(screen.getByLabelText(COPY.markdownLabel)).toHaveValue(
+      '### Personal\n- [ ] Call someone\n',
+    )
+    expect(screen.getByText(COPY.markdownErrorLine(1, 'unsupported-heading'))).toBeInTheDocument()
+    expect(screen.getByText(COPY.importFailedWithErrors)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(COPY.markdownLabel), {
+      target: { value: '## Personal\n- [ ] Call someone\n' },
+    })
+    expect(screen.queryByText(COPY.importFailedWithErrors)).not.toBeInTheDocument()
+  })
+
+  it('reports a file the browser cannot read without touching the document', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(File.prototype, 'text').mockRejectedValue(new Error('not readable'))
+
+    render(<App />)
+    await user.upload(
+      screen.getByLabelText(COPY.importMarkdown),
+      new File(['## Imported\n'], 'todo.md', { type: 'text/markdown' }),
+    )
+
+    expect(await screen.findByText(COPY.importFailed)).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: `Title of ${COPY.listContext(1, COPY.starter.priorities)}` }),
+    ).toHaveValue(COPY.starter.priorities)
+  })
+
+  it('saves a PDF through the same dialog as printing, and is blocked with it', async () => {
+    const user = userEvent.setup()
+    stubLayout({ listHeight: 100, panelHeight: 900 })
+    const print = vi.fn()
+    vi.stubGlobal('print', print)
+
+    render(<App />)
+    const saveButton = await screen.findByRole('button', { name: COPY.savePdf })
+
+    // One dialog, two destinations, so one description carries the settings for both.
+    expect(saveButton).toHaveAccessibleDescription(COPY.printDialogHint)
+    expect(saveButton.closest('.screen-only')).not.toBeNull()
+
+    await user.click(saveButton)
+    expect(print).toHaveBeenCalledOnce()
+  })
+
+  it('blocks saving a PDF while a list is too tall for a panel', async () => {
+    stubLayout({ listHeight: 2000, panelHeight: 900 })
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: COPY.printBlocked })
+    expect(screen.getByRole('button', { name: COPY.savePdf })).toBeDisabled()
+  })
+
   it('restores a valid stored document without any recovery prompt', () => {
     localStorage.setItem(
       STORAGE_KEY,

@@ -47,8 +47,20 @@ export const COPY = {
   moonTypographyHint:
     'Draws list titles and tasks with the geometric Moon type alphabet, on screen and in print. Letters without a Moon glyph, such as digits, stay in the normal typeface.',
   print: 'Print A4',
+  // The same dialog produces both outputs: paper when a printer is the destination, a file when
+  // “Save as PDF” is. One hint therefore describes both actions instead of repeating the settings.
+  savePdf: 'Save as PDF',
   printDialogHint:
-    'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. Printers without edge-to-edge support may still add a margin.',
+    'In the print dialog, choose A4 landscape, no margins, 100% scale, and turn off headers and footers. To save a file instead, choose “Save as PDF” as the destination. Printers without edge-to-edge support may still add a margin.',
+  exportMarkdown: 'Export Markdown',
+  importMarkdown: 'Import Markdown',
+  // Importing replaces the whole document, so the control says so before the picker opens. The
+  // replacement is a recorded edit, so the sentence also names the action that reverses it.
+  importMarkdownHint:
+    'Replaces the current document with the contents of a Markdown file. Undo restores what was here.',
+  importFailed: 'Could not read that file. Choose a Markdown (.md) file saved from this editor.',
+  importFailedWithErrors:
+    'That file was read, but its Markdown has errors. The document is unchanged until they are fixed.',
   preparingPrint: 'Preparing layout…',
   printBlocked: 'Resolve issues to print',
   printBlockedTitle: 'Printing is blocked',
